@@ -149,6 +149,14 @@ def doAllPairs(verts):    # Use O(n^2) method for verification
                 q.BSF, q.nBSF = dpq2, jp
 #----------------------------------------------------------------
 def doAMethod(verts):    # A usually-faster method than brute force
+    '''Puts points in locality buckets, treats each bucket, then treats
+    several shells of cells around each cell.  Is faster than brute
+    force method for n>29.  Time is O(n) for x-y data, vs brute force
+    O(n^2).  v1 treats up to 3 shells in the x,y plane and ignores z
+    shells.  Shells are treated in order of increasing distance.  A
+    later version should keep going up in shells until we have found
+    at least one neighbor for every point.  v1 doesn't verify that
+    completion happens, but it's highly likely to happen.    '''
     nv = len(verts)
     if nv < 3: return
     # Find min & max values on each axis
