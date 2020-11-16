@@ -1,0 +1,5 @@
+*.scad
+out
+t1-*
+t-*
+__pycache__

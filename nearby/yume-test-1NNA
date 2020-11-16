@@ -1,0 +1,12 @@
+#!/bin/sh
+
+yume -ex -la 'ls -l' 'echo; date;ls -l'  -la 'wc *py' 'echo; date;wc *py' \
+         -la 'wc *scad' 'echo; date;wc *scad' -la 'Rego' "%+$0"\
+  -bu -la 'echo Point Count List is: $NP' -la "Point Count List:" -la NP -iv '100 200 400 800' \
+  -bu -la 'test-1NN avbv, both+visualize'  'echo; ./test-1NNa.py avbv "$NP"' \
+  -bu -la 'test-1NN av, AMethod+visualize' 'echo; ./test-1NNa.py av "$NP"' \
+  -bu -la 'test-1NN bv, basic + visualize' 'echo; ./test-1NNa.py bv "$NP"' \
+  -bu -la 'test-1NN av, AMethod+vis+label' 'echo; ./test-1NNa.py av "$NP" 2 1' \
+  -bu -la 'test-1NN bv, basic + vis+label' 'echo; ./test-1NNa.py bv "$NP" 2 1' \
+  -bu -la 'test-1NN a, Amethod'            'echo; ./test-1NNa.py a  "$NP"'\
+  -bu -la 'test-1NN b, basic  '            'echo; ./test-1NNa.py b  "$NP"'
