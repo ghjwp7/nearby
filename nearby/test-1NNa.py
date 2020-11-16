@@ -12,16 +12,11 @@
 
 from random import seed, random
 from pypevue import Point    # x,y,z point, with numerous methods
-from math import exp, log, sqrt, atan2, degrees
-#----------------------------------------------------------------
-class NullCell:
-    @property
-    def cell(self): return None
-    @property
-    def vList(self): return []
+from math import sqrt, atan2, degrees
 #----------------------------------------------------------------
 class Cell:
-    Big = 1e99
+    Big = 1e99            # Big is an upper limit on numeric data
+    popPerCell = 3        # Desired vertex count per cell of partition
     def __init__(self, num):
         self.cell  = num
         self.vList = []
@@ -154,25 +149,18 @@ def doAllPairs(verts):    # Use O(n^2) method for verification
                 q.BSF, q.nBSF = dpq2, jp
 #----------------------------------------------------------------
 def doAMethod(verts):    # A usually-faster method than brute force
-    nv, Big = len(verts), 1e99
+    nv = len(verts)
     if nv < 3: return
-    # Find min & max values on each axis, and init. best-so-far data
-    kq = nv-1;  q = verts[kq]
-    xmin = xmax = q.x;  ymin = ymax = q.y;  zmin = zmax = q.z
-    for jp in range(nv):
-        p = verts[jp]
-        d2 = (p-q).mag2()   # Squared distance of p and q
-        #p.BSF, p.nBSF = d2, kq
-        #if d2 < q.BSF:
-        #    q.BSF, q.nBSF = d2, jp
-        q, kq = p, jp
+    # Find min & max values on each axis
+    xmax, ymax, zmax = -Cell.Big, -Cell.Big, -Cell.Big
+    xmin, ymin, zmin = +Cell.Big, +Cell.Big, +Cell.Big
+    for q in verts:
         xmin, xmax = min(xmin, q.x),  max(xmax, q.x)
         ymin, ymax = min(ymin, q.y),  max(ymax, q.y)
         zmin, zmax = min(zmin, q.z),  max(zmax, q.z)
     #print (f'{xmin:7.3f} {xmax:7.3f} {ymin:7.3f} {ymax:7.3f} {zmin:7.3f} {zmax:7.3f}')
     xspan, yspan, zspan = xmax-xmin, ymax-ymin, zmax-zmin
-    popPerCell = 3              # desired count per cell of partition
-    cellCount = nv/popPerCell
+    cellCount = nv/Cell.popPerCell
     if zspan==0:
         xparts = yparts = int(sqrt(cellCount)); zparts, zspan = 0, 1
     else:
@@ -228,12 +216,12 @@ def doAMethod(verts):    # A usually-faster method than brute force
         cn2 = calcCellNum(verts[n2])
         if cn1==cn2: return "blue"
         return "red"
-
     #visData(points, "wsA1", makeLabels=True, colorFunc=roro)
-
+    
+    # Might be better to have separate x/y/z shell thicknesses
     shellThik2 = min(xspan/xparts, yspan/yparts)**2
     for c in cells:
-        if not c: continue
+        if not c: continue      # Skip empty cells
         cellnum = c.cell
         for jp in c.vList:
             p = verts[jp]
