@@ -207,9 +207,9 @@ def doAMethod(verts):    # A usually-faster method than brute force
             smt.append((ii, i, 0))
             for j in range(1,yparts):
                 smt.append((ii+j*j, i, j))
-        print(sorted(smt))
+        #print(sorted(smt))
         for dist2, kx, ky in sorted(smt):
-            rufx, rufy = max(0,kx-1)*xdelt, max(0,ky-1)*ydelt
+            rufx, rufy = max(0,kx-1)/xmul, max(0,ky-1)/ymul
             ruff = rufx*rufx + rufy*rufy
             ruffer = lambda rufTarg, celldd=ruff: celldd < ruffTarg
             # [Following 4-symmetry assumes xdelt == ydelt] 
@@ -228,6 +228,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
                 kx, ky = -ky, kx
         #import inspect
         for cOffset, nummer, ruffer, finner, kx, ky, ruff in smp:
+            continue
             print(f'{cOffset:4}  n {nummer.__name__:5}  f {finner.__name__:5}  k {kx:2} {ky:2}   {ruff:7.4f}')
         print (xparts, yparts, xstep, ystep, zstep)
         return smp
@@ -264,36 +265,33 @@ def doAMethod(verts):    # A usually-faster method than brute force
     def calcCellNum(p):
         dx, dy, dz = p.x-xmin, p.y-ymin, p.z-zmin
         return int(dx*xmul) + int(dy*ymul)*ystep + int(dz*zmul)*zstep
-
     for jp in range(nv):
-        cellnum = calcCellNum(verts[jp])
+        cellnum = calcCellNum(verts[jp]) # Put each vertex into a cell
         if cellnum >= cellCount: continue
         if not cells[cellnum]:
+             # Init cell when its first vertex occurs
             cells[cellnum] = Cell(cellnum)
         cells[cellnum].addVert(jp, verts)
     for c in cells:
-        continue
+        continue           # Optional: print each cell's list & limits
         if c:
             print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
 
-    for c in cells:
+    for c in cells:          # Treat all vertex pairs within each cell
         if not c: continue
         cv = c.vList
         lcv = len(cv)
-        #if lcv < 2:
-        #    print (f'  {c.cell}:{cv}', end=''); continue
-        for jp in range(lcv):
-            p = verts[cv[jp]]
-            for kq in range(jp+1, lcv):
+        for jp in range(lcv):   # For each vertex in cell, test its
+            p = verts[cv[jp]]   # distance to other vertices in cell
+            for kq in range(jp+1, lcv): 
                 q = verts[cv[kq]]
                 d2 = (p-q).mag2()   # Squared distance of p and q
-                if d2 < p.BSF:
+                if d2 < p.BSF:      # Is q an improvement for p?
                     p.BSF, p.nBSF = d2, cv[kq]
-                if d2 < q.BSF:
+                if d2 < q.BSF:      # Is p an improvement for q?
                     q.BSF, q.nBSF = d2, cv[jp]
-    #print ()
 
-    def roro(n1, n2):
+    def roro(n1, n2):           # roro is used only for debugging
         cn1 = calcCellNum(verts[n1])
         if n2<0:
             if len(cells[cn1].vList)>1: return "blue"
@@ -303,15 +301,18 @@ def doAMethod(verts):    # A usually-faster method than brute force
         return "red"
     #visData(points, "wsA1", makeLabels=True, colorFunc=roro)
     
-    # Might be better to have separate x/y/z shell thicknesses
+    # Might be better to have separate x/y/z shell thicknesses?
     shellThik2 = min(xspan/xparts, yspan/yparts)**2
+    smp = makeShellList()       # create ordered list for visits
+    cshell = tuple((kx, ky, max(0,kx-1)**2+max(0,ky-1)**2) for os, nu, ru, fi, kx, ky, rf in smp)
     for c in cells:
         if not c: continue      # Skip empty cells
         cellnum = c.cell
         for jp in c.vList:
             p = verts[jp]
             # Treat neighbor cells by distance ranks (with 2-fold symmetry)
-            for kx, ky, shell2 in ((0,1,0), (1,1,0), (0,2,1), (1,2,1), (2,1,1), (2,2,1), (0,3,4), (1,3,4), (3,1,4), (2,3,4), (3,2,4), (3,3,4)):
+            #cshell = ((0,1,0), (1,1,0), (0,2,1), (1,2,1), (2,1,1), (2,2,1), (0,3,4), (1,3,4), (3,1,4), (2,3,4), (3,2,4), (3,3,4))
+            for kx, ky, shell2 in cshell:
                 if shell2*shellThik2 > p.BSF:
                     break
                 for jj in range(4): # kx, ky = -ky, kx is for symmetry
