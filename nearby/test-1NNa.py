@@ -21,13 +21,13 @@ class Cell:
         self.cell  = num
         self.vList = []
         # Init range of coords of items in cell
-        self.spanHi = Point(-Cell.Big,-Cell.Big,-Cell.Big)
-        self.spanLo = Point(+Cell.Big,+Cell.Big,+Cell.Big)
+        self.vHi = Point(-Cell.Big,-Cell.Big,-Cell.Big)
+        self.vLo = Point(+Cell.Big,+Cell.Big,+Cell.Big)
 
     def addVert(self, jp, verts):
         self.vList.append(jp)
         # See if vertex jp increases range of coords in cell
-        h, l, p = self.spanHi, self.spanLo, verts[jp]
+        h, l, p = self.vHi, self.vLo, verts[jp]
         h.x, h.y, h.z = max(h.x,p.x), max(h.y,p.y), max(h.z,p.z)
         l.x, l.y, l.z = min(l.x,p.x), min(l.y,p.y), min(l.z,p.z)
 
@@ -156,7 +156,86 @@ def doAMethod(verts):    # A usually-faster method than brute force
     shells.  Shells are treated in order of increasing distance.  A
     later version should keep going up in shells until we have found
     at least one neighbor for every point.  v1 doesn't verify that
-    completion happens, but it's highly likely to happen.    '''
+    completion happens, but it's highly likely to happen. 
+
+    Note, for comments about speeding up searches by distance-ordering
+    of localities of points, see section 2 of "A fast all nearest
+    neighbor algorithm for applications involving large point-clouds",
+    by Jagan Sankaranarayanan, H. Samet, A. Varshney, 2007 (eg at
+    https://www.cs.umd.edu/~varshney/papers/jagan_CG07.pdf ) .  That
+    paper gives a more systematic method (usable for kNN problem)
+    than the somewhat less precise, but simpler, methods here (usable
+    for 1NN problem).    '''
+    def makeShellList():
+        # Make distance-ordered list of neighbor cells.  Start by
+        # defining criterion methods for handling neighbors at
+        # cardinal-and-ordinal directions CAO = [N,S,E,W,NE,SE,SW,NW].
+        # Number methods num# for # in CAO return True if the
+        # neighbor's row and column are in bounds.  If a cell-number
+        # test fails, go on to next cell number.  Rough-distance
+        # methods (thunks with embedded ruff values) return True if
+        # current block's distance from proposed neighbor block is
+        # below target.  Since we order the neighbors search by
+        # increasing rough distance, if a rough-distance test fails,
+        # all subsequent ruff tests will fail, so on failure we can
+        # break out of cells search and go on to next point in verts.
+        # Fine-distance methods fin# for # in CAO return True if
+        # current point's distance from neighbor's nearest edge or
+        # corner distance is below target. If a fine-distance test
+        # fails, go on to next cell number.
+        def numNE(tx, ty): return tx <= xparts and ty <= yparts
+        def numSE(tx, ty): return tx <= xparts and ty >= 0
+        def numSW(tx, ty): return tx >= 0      and ty >= 0
+        def numNW(tx, ty): return tx >= 0      and ty <= yparts
+        def numN (tx, ty): return ty <= yparts
+        def numS (tx, ty): return ty >= 0
+        def numE (tx, ty): return tx <= xparts
+        def numW (tx, ty): return tx >= 0
+
+        def finS (p,c,target): return (p.y-c.vHi.y)**2 < target
+        def finN (p,c,target): return (p.y-c.vLo.y)**2 < target
+        def finE (p,c,target): return (p.x-c.vLo.x)**2 < target
+        def finW (p,c,target): return (p.x-c.vHi.x)**2 < target
+        def finNE(p,c,target): return (p.x-c.vLo.x)**2 +(p.y-c.vHi.y)**2 < target
+        def finSE(p,c,target): return (p.x-c.vLo.x)**2 +(p.y-c.vLo.y)**2 < target
+        def finSW(p,c,target): return (p.x-c.vHi.x)**2 +(p.y-c.vLo.y)**2 < target
+        def finNW(p,c,target): return (p.x-c.vHi.x)**2 +(p.y-c.vHi.y)**2 < target
+        # Make shells map for first quadrant of neighbors
+        smt, smp = [], []       # Shell maps temporary & permanent
+        for i in range(1,xparts+1):
+            ii = i*i
+            smt.append((ii, i, 0))
+            for j in range(1,yparts+1):
+                smt.append((ii+j*j, i, j))
+        print(sorted(smt))
+        for dist2, kx, ky in sorted(smt):
+            rufx, rufy = max(0,kx-1)*xdelt, max(0,ky-1)*ydelt
+            ruff = rufx*rufx + rufy*rufy
+            ruffer = lambda rufTarg, celldd=ruff: celldd < ruffTarg
+            # [Following 4-symmetry assumes xdelt == ydelt] 
+            # Treat 4 cells (by symmetry) at current distance
+            for jj in range(4): # kx, ky = -ky, kx gets group
+                cOffset = kx*xstep + ky*ystep
+                grid = 1+(kx>0)-(kx<0) + 3*(1+(ky<0)-(ky>0))
+                nummer = (numNW, numN, numNE,
+                          numW, None,  numE,
+                          numSW, numS, numSE)[grid]
+                finner = (finNW, finN, finNE,
+                          finW, None,  finE,
+                          finSW, finS, finSE)[grid]
+                todo = (cOffset, nummer, ruffer, finner, kx, ky, ruff)
+                smp.append(todo)
+                kx, ky = -ky, kx
+        #import inspect
+        for cOffset, nummer, ruffer, finner, kx, ky, ruff in smp:
+            print(f'{cOffset:4}  n {nummer.__name__:5}  f {finner.__name__:5}  k {kx:2} {ky:2}   {ruff:6.3f}')
+        print (xparts, yparts, xstep, ystep, zstep)
+    #----------------------------------------------------------------
+    #------- debug for makeShellList ---------
+    xparts = yparts = 4;  xdelt  = ydelt  = 0.25
+    xstep = 1; ystep = 1+xparts; zstep = ystep*(1+yparts)
+    makeShellList()
+    #-----------------------------------------
     nv = len(verts)
     if nv < 3: return
     # Find min & max values on each axis
@@ -197,7 +276,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
     for c in cells:
         continue
         if c:
-            print (f'In cell {c.cell:2}:  {c.vList} / {c.spanLo} / {c.spanHi}')
+            print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
 
     for c in cells:
         if not c: continue
@@ -245,10 +324,10 @@ def doAMethod(verts):    # A usually-faster method than brute force
                         continue
                     nbr = cells[nbrCN]
                     mx = my = 0
-                    if dx > 0:    mx = nbr.spanLo.x - p.x
-                    elif dx < 0:  mx = p.x - nbr.spanHi.x
-                    if dy > 0:    my = nbr.spanLo.y - p.y
-                    elif dy < 0:  my = p.y - nbr.spanHi.y
+                    if dx > 0:    mx = nbr.vLo.x - p.x
+                    elif dx < 0:  mx = p.x - nbr.vHi.x
+                    if dy > 0:    my = nbr.vLo.y - p.y
+                    elif dy < 0:  my = p.y - nbr.vHi.y
                     if mx*mx < p.BSF and my*my < p.BSF:
                         kq = nbr.tellClosest(jp, verts)
     #visData(points, "wsA2", makeLabels=True, colorFunc=roro)
