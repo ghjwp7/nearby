@@ -46,10 +46,10 @@ class Cell:
         return kq        
 #----------------------------------------------------------------
 class PNN(Point):
-    def __init__(self, x=0, y=0, z=0):
+    def __init__(self, x=0, y=0, z=0, noNbr=0):
         self.x, self.y, self.z = x, y, z
         self.BSF = 1e99       # Best measure found So Far
-        self.nBSF = None      # index of best neighbor so far
+        self.nBSF = noNbr     # index of best neighbor so far
 #----------------------------------------------------------------
 def inUnitSquare(p):            # Return True if p is in region
     return 1 >= p.x >= 0 and 1 >= p.y >= 0
@@ -61,7 +61,7 @@ def makeTestData(npoints, ndim=2, salt=123457,
     seed(a=salt+npoints)
     zf = random if ndim==3 else lambda:0
     return [PNN(scale*random(), scale*random(),
-                  scale*zf()) for i in range(npoints)] 
+                  scale*zf(), i) for i in range(npoints)] 
 #----------------------------------------------------------------
 def visData(points, baseName, makeLabels=False,
             colorFunc=lambda n1, n2: n1):
@@ -183,13 +183,13 @@ def doAMethod(verts):    # A usually-faster method than brute force
         # current point's distance from neighbor's nearest edge or
         # corner distance is below target. If a fine-distance test
         # fails, go on to next cell number.
-        def numNE(tx, ty): return tx <= xparts and ty <= yparts
-        def numSE(tx, ty): return tx <= xparts and ty >= 0
-        def numSW(tx, ty): return tx >= 0      and ty >= 0
-        def numNW(tx, ty): return tx >= 0      and ty <= yparts
-        def numN (tx, ty): return ty <= yparts
+        def numNE(tx, ty): return tx < xparts and ty < yparts
+        def numSE(tx, ty): return tx < xparts and ty >= 0
+        def numSW(tx, ty): return tx >= 0     and ty >= 0
+        def numNW(tx, ty): return tx >= 0     and ty < yparts
+        def numN (tx, ty): return ty < yparts
         def numS (tx, ty): return ty >= 0
-        def numE (tx, ty): return tx <= xparts
+        def numE (tx, ty): return tx < xparts
         def numW (tx, ty): return tx >= 0
 
         def finS (p,c,target): return (p.y-c.vHi.y)**2 < target
@@ -202,10 +202,10 @@ def doAMethod(verts):    # A usually-faster method than brute force
         def finNW(p,c,target): return (p.x-c.vHi.x)**2 +(p.y-c.vHi.y)**2 < target
         # Make shells map for first quadrant of neighbors
         smt, smp = [], []       # Shell maps temporary & permanent
-        for i in range(1,xparts+1):
+        for i in range(1,xparts):
             ii = i*i
             smt.append((ii, i, 0))
-            for j in range(1,yparts+1):
+            for j in range(1,yparts):
                 smt.append((ii+j*j, i, j))
         print(sorted(smt))
         for dist2, kx, ky in sorted(smt):
@@ -228,16 +228,17 @@ def doAMethod(verts):    # A usually-faster method than brute force
                 kx, ky = -ky, kx
         #import inspect
         for cOffset, nummer, ruffer, finner, kx, ky, ruff in smp:
-            print(f'{cOffset:4}  n {nummer.__name__:5}  f {finner.__name__:5}  k {kx:2} {ky:2}   {ruff:6.3f}')
+            print(f'{cOffset:4}  n {nummer.__name__:5}  f {finner.__name__:5}  k {kx:2} {ky:2}   {ruff:7.4f}')
         print (xparts, yparts, xstep, ystep, zstep)
+        return smp
     #----------------------------------------------------------------
     #------- debug for makeShellList ---------
-    xparts = yparts = 4;  xdelt  = ydelt  = 0.25
-    xstep = 1; ystep = 1+xparts; zstep = ystep*(1+yparts)
-    makeShellList()
+    #xparts = yparts = 4;  xdelt  = ydelt  = 0.251
+    #xstep = 1; ystep = xparts; zstep = ystep*yparts
+    #smp = makeShellList()
     #-----------------------------------------
     nv = len(verts)
-    if nv < 3: return
+    if nv < 2: return
     # Find min & max values on each axis
     xmax, ymax, zmax = -Cell.Big, -Cell.Big, -Cell.Big
     xmin, ymin, zmin = +Cell.Big, +Cell.Big, +Cell.Big
@@ -252,20 +253,17 @@ def doAMethod(verts):    # A usually-faster method than brute force
         xparts = yparts = int(sqrt(cellCount)); zparts, zspan = 0, 1
     else:
         xparts = yparts = zparts = int(cellCount**(1/3))
-    if xparts < 4:  xparts = yparts = 4
-    xmul, ymul, zmul = xparts/xspan, yparts/yspan, zparts/zspan
-    
-    #print (f'{xparts:7} {xmul:7.3f} {yparts:7} {ymul:7.3f} {zparts:7} {zmul:7.3f}')
-    xstep = 1; ystep = 1+xparts; zstep = ystep*(1+yparts)
-    xper, yper, zper = xstep*xmul, ystep*ymul, zstep*zmul
-    #print (f'{xparts:7} {xstep:7} {yparts:7} {ystep:7} {zparts:7} {zstep:7}')
+    res, minparts = 0.999, 4
+    if xparts < minparts:  xparts = yparts = minparts
+    xmul, ymul, zmul = res*xparts/xspan, res*yparts/yspan, res*zparts/zspan
+    xstep = 1; ystep = xparts; zstep = ystep*yparts
+    print (f'  x {xparts:3} {xstep:4} {xmul:7.3f} {xspan:7.3f} {xmul*xspan:7.4f}\n  y {yparts:3} {ystep:4} {ymul:7.3f} {yspan:7.3f} {ymul*yspan:7.4f}\n  z {zparts:3} {zstep:4} {zmul:7.3f} {zspan:7.3f} {zmul*zspan:7.4f}')
     # Make lists of points in various cells.
-    cellCount = zstep*(zparts+1)
+    cellCount = zstep*max(1,zparts)
     cells = [None]*cellCount
     def calcCellNum(p):
         dx, dy, dz = p.x-xmin, p.y-ymin, p.z-zmin
-        #return int(dx*xper) + int(dy*yper) + int(dz*zper)
-        return int(dx*xper) + int(dy*ymul)*ystep + int(dz*zmul)*zstep
+        return int(dx*xmul) + int(dy*ymul)*ystep + int(dz*zmul)*zstep
 
     for jp in range(nv):
         cellnum = calcCellNum(verts[jp])
