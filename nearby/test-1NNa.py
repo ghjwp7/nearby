@@ -31,9 +31,9 @@ class Cell:
         h.x, h.y, h.z = max(h.x,p.x), max(h.y,p.y), max(h.z,p.z)
         l.x, l.y, l.z = min(l.x,p.x), min(l.y,p.y), min(l.z,p.z)
 
-    def tellClosest(self, jp, verts):
-        '''Return id of point in cell that's closest to vert jp'''
-        p, dlo, kqlo = verts[jp], 1e99, None
+    def setClosest(self, jp, verts):
+        '''Fix id of point in cell that's closest to vert jp'''
+        p, dlo = verts[jp], 1e99
         for kq in self.vList:
             q = verts[kq]
             d2 = (p-q).mag2()   # Squared distance of p and q
@@ -41,9 +41,6 @@ class Cell:
                 p.BSF, p.nBSF = d2, kq
             if d2 < q.BSF:
                 q.BSF, q.nBSF = d2, jp
-            if d2 < dlo:
-                dlo, kqlo = d2, kq
-        return kq        
 #----------------------------------------------------------------
 class PNN(Point):
     def __init__(self, x=0, y=0, z=0, noNbr=0):
@@ -54,14 +51,34 @@ class PNN(Point):
 def inUnitSquare(p):            # Return True if p is in region
     return 1 >= p.x >= 0 and 1 >= p.y >= 0
 #----------------------------------------------------------------
+def tryFax(n):  # Find product bx*by ~ n.
+    sx = bx = by = tx = ty = round(n**0.5)
+    bd = abs(n - tx*tx)
+    while tx-ty < 11:
+        while tx*ty > n:
+            ty -= 1
+            if bd > abs(tx*ty-n): bd, bx, by = abs(tx*ty-n), tx, ty
+        tx += 1
+        if bd > abs(tx*ty-n): bd, bx, by = abs(tx*ty-n), tx, ty
+    return bx, by
+#----------------------------------------------------------------
 def makeTestData(npoints, ndim=2, salt=123457,
                  scale=1, region=inUnitSquare):
     '''Make npoints points of specified dimension (2 or 3)
     within a specified region.'''
     seed(a=salt+npoints)
     zf = random if ndim==3 else lambda:0
-    return [PNN(scale*random(), scale*random(),
-                  scale*zf(), i) for i in range(npoints)] 
+    # Compute  bx, by ~ npoints  in case we need them below
+    bx, by = tryFax(npoints)
+
+    # Note, for more general cases with region check, will need for-loop
+    ra = [PNN(scale*random(), scale*random(),
+                  scale*zf(), i) for i in range(npoints)]
+    sn = int(round(npoints**0.5))
+    ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
+                  scale*zf(), i) for i in range(bx) for j in range(by)]
+    ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf(), i) for i in range(bx) for j in range(by)]
+    return ra
 #----------------------------------------------------------------
 def visData(points, baseName, makeLabels=False,
             colorFunc=lambda n1, n2: n1):
@@ -114,7 +131,7 @@ module oneArrow(trans, zAngle, colo, cylLen)
          translate ([0, 0, cylLen-ArrowLen-ballSize/2])
             cylinder(d1=ArrowMaxDiam, d2=0, h=ArrowLen);
       {'}'}
-module oneLabel (trans, colo, siz, txt) 
+module oneLabel (trans, colo, siz, txt)
     translate (v=trans) color(c=colo)
         linear_extrude(0.06) text(size=siz, text=txt);
 
@@ -137,7 +154,7 @@ module oneLabel (trans, colo, siz, txt)
 #----------------------------------------------------------------
 def doAllPairs(verts):    # Use O(n^2) method for verification
     nv = len(verts)
-    
+
     for jp in range(nv):
         p = verts[jp]
         for kq in range(jp+1, nv):
@@ -151,38 +168,51 @@ def doAllPairs(verts):    # Use O(n^2) method for verification
 def doAMethod(verts):    # A usually-faster method than brute force
     '''Puts points in locality buckets, treats each bucket, then treats
     several shells of cells around each cell.  Is faster than brute
-    force method for n>29.  Time is O(n) for x-y data, vs brute force
-    O(n^2).  v1 treats up to 3 shells in the x,y plane and ignores z
-    shells.  Shells are treated in order of increasing distance.  A
-    later version should keep going up in shells until we have found
-    at least one neighbor for every point.  v1 doesn't verify that
-    completion happens, but it's highly likely to happen. 
+    force method for n > ~ 80.  Time is O(n) for x-y data, vs brute
+    force method's O(n^2).  In 18 Nov version, shells in the x,y plane
+    are treated in order of increasing distance, with z levels not
+    tested or used.
 
     Note, for comments about speeding up searches by distance-ordering
     of localities of points, see section 2 of "A fast all nearest
     neighbor algorithm for applications involving large point-clouds",
     by Jagan Sankaranarayanan, H. Samet, A. Varshney, 2007 (eg at
     https://www.cs.umd.edu/~varshney/papers/jagan_CG07.pdf ) .  That
-    paper gives a more systematic method (usable for kNN problem)
-    than the somewhat less precise, but simpler, methods here (usable
-    for 1NN problem).    '''
+    paper gives a more systematic method (usable for kNN problem) than
+    the somewhat less precise, but simpler, methods here (ok for 1NN
+    problem, and might extend to kNN).
+
+    '''
+
+    #-----------------------------------------
+    # define color-selector function for debugging
+    def roro(n1, n2):
+        cn1 = calcCellNum(verts[n1])
+        if n2<0:
+            if len(cells[cn1].vList)>1: return "blue"
+            return "red"
+        cn2 = calcCellNum(verts[n2])
+        if cn1==cn2: return "blue"
+        return "red"
+    #-----------------------------------------
+    # Create distance-ordered list of neighbor cells (shells of cells)
     def makeShellList():
-        # Make distance-ordered list of neighbor cells.  Start by
-        # defining criterion methods for handling neighbors at
-        # cardinal-and-ordinal directions CAO = [N,S,E,W,NE,SE,SW,NW].
-        # Number methods num# for # in CAO return True if the
-        # neighbor's row and column are in bounds.  If a cell-number
-        # test fails, go on to next cell number.  Rough-distance
-        # methods (thunks with embedded ruff values) return True if
-        # current block's distance from proposed neighbor block is
-        # below target.  Since we order the neighbors search by
-        # increasing rough distance, if a rough-distance test fails,
-        # all subsequent ruff tests will fail, so on failure we can
-        # break out of cells search and go on to next point in verts.
-        # Fine-distance methods fin# for # in CAO return True if
-        # current point's distance from neighbor's nearest edge or
-        # corner distance is below target. If a fine-distance test
-        # fails, go on to next cell number.
+        # Start by defining criterion methods for handling neighbors
+        # at cardinal-and-ordinal directions CAO =
+        # [N,S,E,W,NE,SE,SW,NW].  Number methods num# for # in CAO
+        # return True if the neighbor's row and column are in bounds.
+        # If a cell-number test fails, go on to next cell number.
+        # Rough-distance methods (thunks with embedded ruff values)
+        # return True if current block's distance from proposed
+        # neighbor block is below target.  Since we order the
+        # neighbors search by increasing rough distance, if a
+        # rough-distance test fails, all subsequent ruff tests will
+        # fail, so on failure we can break out of cells search and go
+        # on to next point in verts.  Fine-distance methods fin# for #
+        # in CAO return True if current point's distance from
+        # neighbor's nearest edge or corner distance is below
+        # target. If a fine-distance test fails, go on to next cell
+        # number.
         def numNE(tx, ty): return tx < xparts and ty < yparts
         def numSE(tx, ty): return tx < xparts and ty >= 0
         def numSW(tx, ty): return tx >= 0     and ty >= 0
@@ -192,14 +222,14 @@ def doAMethod(verts):    # A usually-faster method than brute force
         def numE (tx, ty): return tx < xparts
         def numW (tx, ty): return tx >= 0
 
-        def finS (p,c,target): return (p.y-c.vHi.y)**2 < target
-        def finN (p,c,target): return (p.y-c.vLo.y)**2 < target
-        def finE (p,c,target): return (p.x-c.vLo.x)**2 < target
-        def finW (p,c,target): return (p.x-c.vHi.x)**2 < target
-        def finNE(p,c,target): return (p.x-c.vLo.x)**2 +(p.y-c.vHi.y)**2 < target
-        def finSE(p,c,target): return (p.x-c.vLo.x)**2 +(p.y-c.vLo.y)**2 < target
-        def finSW(p,c,target): return (p.x-c.vHi.x)**2 +(p.y-c.vLo.y)**2 < target
-        def finNW(p,c,target): return (p.x-c.vHi.x)**2 +(p.y-c.vHi.y)**2 < target
+        def finNW(p,c,target): return (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < target
+        def finN (p,c,target): return (p.y-c.vLo.y)**2                   < target
+        def finNE(p,c,target): return (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 < target
+        def finE (p,c,target): return (p.x-c.vLo.x)**2                   < target
+        def finSE(p,c,target): return (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 < target
+        def finS (p,c,target): return (p.y-c.vHi.y)**2                   < target
+        def finSW(p,c,target): return (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < target
+        def finW (p,c,target): return (p.x-c.vHi.x)**2                   < target
         # Make shells map for first quadrant of neighbors
         smt, smp = [], []       # Shell maps temporary & permanent
         for i in range(1,xparts):
@@ -207,12 +237,11 @@ def doAMethod(verts):    # A usually-faster method than brute force
             smt.append((ii, i, 0))
             for j in range(1,yparts):
                 smt.append((ii+j*j, i, j))
-        #print(sorted(smt))
         for dist2, kx, ky in sorted(smt):
             rufx, rufy = max(0,kx-1)/xmul, max(0,ky-1)/ymul
             ruff = rufx*rufx + rufy*rufy
             ruffer = lambda rufTarg, celldd=ruff: celldd < ruffTarg
-            # [Following 4-symmetry assumes xdelt == ydelt] 
+            # [Following 4-symmetry assumes xdelt == ydelt]
             # Treat 4 cells (by symmetry) at current distance
             for jj in range(4): # kx, ky = -ky, kx gets group
                 cOffset = kx*xstep + ky*ystep
@@ -230,7 +259,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
         for cOffset, nummer, ruffer, finner, kx, ky, ruff in smp:
             continue
             print(f'{cOffset:4}  n {nummer.__name__:5}  f {finner.__name__:5}  k {kx:2} {ky:2}   {ruff:7.4f}')
-        print (xparts, yparts, xstep, ystep, zstep)
+        #print (xparts, yparts, xstep, ystep, zstep)
         return smp
     #----------------------------------------------------------------
     #------- debug for makeShellList ---------
@@ -240,6 +269,8 @@ def doAMethod(verts):    # A usually-faster method than brute force
     #-----------------------------------------
     nv = len(verts)
     if nv < 2: return
+    
+    #-----------------------------------------
     # Find min & max values on each axis
     xmax, ymax, zmax = -Cell.Big, -Cell.Big, -Cell.Big
     xmin, ymin, zmin = +Cell.Big, +Cell.Big, +Cell.Big
@@ -248,17 +279,39 @@ def doAMethod(verts):    # A usually-faster method than brute force
         ymin, ymax = min(ymin, q.y),  max(ymax, q.y)
         zmin, zmax = min(zmin, q.z),  max(zmax, q.z)
     #print (f'{xmin:7.3f} {xmax:7.3f} {ymin:7.3f} {ymax:7.3f} {zmin:7.3f} {zmax:7.3f}')
+
+    #-----------------------------------------
+    # Compute cell block size to fit so many blocks into occupied space
     xspan, yspan, zspan = xmax-xmin, ymax-ymin, zmax-zmin
-    cellCount = nv/Cell.popPerCell
+    cellCount = nv//Cell.popPerCell
+    if zspan > 0:
+        vol = xspan*yspan*zspan            # occupied volume
+        blokSide = (vol/cellCount)**(1/3)  # nominal cube-side
+    else:
+        vol = xspan*yspan                  # occupied area
+        blokSide = (vol/cellCount)**(1/2)  # nominal square-side
+    nx, ny, nz = [max(1,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
+    print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
+    print ('Raw counts, spans, and extents')
+    for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
+        print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
+    blokSide = 0   # Recompute blokSide for best fit, given new block counts
+    for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
+        blokSide = max(blokSide, 1.001*s/n)
+    print ('New counts, spans, and extents')
+    for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
+        print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
+    print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
+
     if zspan==0:
         xparts = yparts = int(sqrt(cellCount)); zparts, zspan = 0, 1
     else:
         xparts = yparts = zparts = int(cellCount**(1/3))
-    res, minparts = 0.999, 4
-    if xparts < minparts:  xparts = yparts = minparts
+    res = 0.999
     xmul, ymul, zmul = res*xparts/xspan, res*yparts/yspan, res*zparts/zspan
     xstep = 1; ystep = xparts; zstep = ystep*yparts
-    print (f'  x {xparts:3} {xstep:4} {xmul:7.3f} {xspan:7.3f} {xmul*xspan:7.4f}\n  y {yparts:3} {ystep:4} {ymul:7.3f} {yspan:7.3f} {ymul*yspan:7.4f}\n  z {zparts:3} {zstep:4} {zmul:7.3f} {zspan:7.3f} {zmul*zspan:7.4f}')
+    
+    #-----------------------------------------
     # Make lists of points in various cells.
     cellCount = zstep*max(1,zparts)
     cells = [None]*cellCount
@@ -277,41 +330,36 @@ def doAMethod(verts):    # A usually-faster method than brute force
         if c:
             print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
 
-    for c in cells:          # Treat all vertex pairs within each cell
+    #-----------------------------------------
+    # Within each cell, test distance of every vertex pair
+    for c in cells:
         if not c: continue
         cv = c.vList
         lcv = len(cv)
         for jp in range(lcv):   # For each vertex in cell, test its
             p = verts[cv[jp]]   # distance to other vertices in cell
-            for kq in range(jp+1, lcv): 
+            for kq in range(jp+1, lcv):
                 q = verts[cv[kq]]
                 d2 = (p-q).mag2()   # Squared distance of p and q
                 if d2 < p.BSF:      # Is q an improvement for p?
                     p.BSF, p.nBSF = d2, cv[kq]
                 if d2 < q.BSF:      # Is p an improvement for q?
                     q.BSF, q.nBSF = d2, cv[jp]
-
-    def roro(n1, n2):           # roro is used only for debugging
-        cn1 = calcCellNum(verts[n1])
-        if n2<0:
-            if len(cells[cn1].vList)>1: return "blue"
-            return "red"
-        cn2 = calcCellNum(verts[n2])
-        if cn1==cn2: return "blue"
-        return "red"
     #visData(points, "wsA1", makeLabels=True, colorFunc=roro)
-    
-    # Might be better to have separate x/y/z shell thicknesses?
+
+    #-----------------------------------------
+    # Process layers or shells of cells, working outwards
     shellThik2 = min(xspan/xparts, yspan/yparts)**2
-    smp = makeShellList()       # create ordered list for visits
+    smp = makeShellList()       # create ordered list of cells for visits
     cshell = tuple((kx, ky, max(0,kx-1)**2+max(0,ky-1)**2) for os, nu, ru, fi, kx, ky, rf in smp)
     for c in cells:
         if not c: continue      # Skip empty cells
         cellnum = c.cell
         for jp in c.vList:
             p = verts[jp]
+            # (if p distances**2 to cell edge > p.BSF no need to
+            # access nbr but we don't test that in early version)
             # Treat neighbor cells by distance ranks (with 2-fold symmetry)
-            #cshell = ((0,1,0), (1,1,0), (0,2,1), (1,2,1), (2,1,1), (2,2,1), (0,3,4), (1,3,4), (3,1,4), (2,3,4), (3,2,4), (3,3,4))
             for kx, ky, shell2 in cshell:
                 if shell2*shellThik2 > p.BSF:
                     break
@@ -328,10 +376,10 @@ def doAMethod(verts):    # A usually-faster method than brute force
                     if dy > 0:    my = nbr.vLo.y - p.y
                     elif dy < 0:  my = p.y - nbr.vHi.y
                     if mx*mx < p.BSF and my*my < p.BSF:
-                        kq = nbr.tellClosest(jp, verts)
+                        nbr.setClosest(jp, verts)
     #visData(points, "wsA2", makeLabels=True, colorFunc=roro)
     #visData(points, "wsA3")
-        
+
 #----------------------------------------------------------------
 if __name__ == '__main__':
     from sys import argv
@@ -350,12 +398,13 @@ if __name__ == '__main__':
             if l in methodset:
                 baseName = f'ws{l}'
                 points = makeTestData(nverts, ndim=ndim)
+                nv = len(points) # nv can differ from nverts
                 baseTime = time.time()
                 methodset[l](points)
                 ctime = time.time() - baseTime
                 if ptime==0: ptime = ctime
-                print (f'Test time for {l} with {nverts} points: {ctime:3.6f} seconds = {ctime/ptime:5.3f} x previous')
+                print (f'Test time for {l} with {nv} points: {ctime:3.6f} seconds = {ctime/ptime:5.3f} x previous')
                 ptime = ctime
             if l=='v':    # Visualization: Generates SCAD code in baseName file
                 visData(points, baseName, makeLabels=labls)
-       
+
