@@ -75,9 +75,9 @@ def makeTestData(npoints, ndim=2, salt=123457,
     ra = [PNN(scale*random(), scale*random(),
                   scale*zf(), i) for i in range(npoints)]
     sn = int(round(npoints**0.5))
-    ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
+    if 0: ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
                   scale*zf(), i) for i in range(bx) for j in range(by)]
-    ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf(), i) for i in range(bx) for j in range(by)]
+    if 0: ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf(), i) for i in range(bx) for j in range(by)]
     return ra
 #----------------------------------------------------------------
 def visData(points, baseName, makeLabels=False,
@@ -230,19 +230,19 @@ def doAMethod(verts):    # A usually-faster method than brute force
         def finS (p,c,target): return (p.y-c.vHi.y)**2                   < target
         def finSW(p,c,target): return (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < target
         def finW (p,c,target): return (p.x-c.vHi.x)**2                   < target
+
         # Make shells map for first quadrant of neighbors
         smt, smp = [], []       # Shell maps temporary & permanent
+        # Create temporary map to sort into shells order
         for i in range(1,xparts):
             ii = i*i
             smt.append((ii, i, 0))
             for j in range(1,yparts):
                 smt.append((ii+j*j, i, j))
+        # Create permanent map with 4x entries using symmetry
         for dist2, kx, ky in sorted(smt):
-            rufx, rufy = max(0,kx-1)/xmul, max(0,ky-1)/ymul
+            rufx, rufy = max(0,kx-1)*blokSide, max(0,ky-1)*blokSide
             ruff = rufx*rufx + rufy*rufy
-            ruffer = lambda rufTarg, celldd=ruff: celldd < ruffTarg
-            # [Following 4-symmetry assumes xdelt == ydelt]
-            # Treat 4 cells (by symmetry) at current distance
             for jj in range(4): # kx, ky = -ky, kx gets group
                 cOffset = kx*xstep + ky*ystep
                 grid = 1+(kx>0)-(kx<0) + 3*(1+(ky<0)-(ky>0))
@@ -252,21 +252,14 @@ def doAMethod(verts):    # A usually-faster method than brute force
                 finner = (finNW, finN, finNE,
                           finW, None,  finE,
                           finSW, finS, finSE)[grid]
-                todo = (cOffset, nummer, ruffer, finner, kx, ky, ruff)
-                smp.append(todo)
+                todo = (cOffset, nummer, finner, kx, ky, ruff)
+                if abs(kx) < xparts and abs(ky) < yparts:
+                    smp.append(todo)
                 kx, ky = -ky, kx
-        #import inspect
-        for cOffset, nummer, ruffer, finner, kx, ky, ruff in smp:
-            continue
-            print(f'{cOffset:4}  n {nummer.__name__:5}  f {finner.__name__:5}  k {kx:2} {ky:2}   {ruff:7.4f}')
-        #print (xparts, yparts, xstep, ystep, zstep)
         return smp
-    #----------------------------------------------------------------
-    #------- debug for makeShellList ---------
-    #xparts = yparts = 4;  xdelt  = ydelt  = 0.251
-    #xstep = 1; ystep = xparts; zstep = ystep*yparts
-    #smp = makeShellList()
+
     #-----------------------------------------
+    # doAMethod() wants at least 2 vertices
     nv = len(verts)
     if nv < 2: return
     
@@ -281,7 +274,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
     #print (f'{xmin:7.3f} {xmax:7.3f} {ymin:7.3f} {ymax:7.3f} {zmin:7.3f} {zmax:7.3f}')
 
     #-----------------------------------------
-    # Compute cell block size to fit so many blocks into occupied space
+    # Compute cell block size to fit requisite blocks into occupied space
     xspan, yspan, zspan = xmax-xmin, ymax-ymin, zmax-zmin
     cellCount = nv//Cell.popPerCell
     if zspan > 0:
@@ -290,12 +283,15 @@ def doAMethod(verts):    # A usually-faster method than brute force
     else:
         vol = xspan*yspan                  # occupied area
         blokSide = (vol/cellCount)**(1/2)  # nominal square-side
-    nx, ny, nz = [max(1,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
+    nx, ny, nz = [max(2,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
+    if zspan == 0: nz = 1
     print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
     print ('Raw counts, spans, and extents')
     for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
         print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
-    blokSide = 0   # Recompute blokSide for best fit, given new block counts
+    # Blocks may be too big or too small for computed block
+    # counts, so recompute blokSide, given those counts
+    blokSide = 0
     for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
         blokSide = max(blokSide, 1.001*s/n)
     print ('New counts, spans, and extents')
@@ -303,41 +299,46 @@ def doAMethod(verts):    # A usually-faster method than brute force
         print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
     print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
 
-    if zspan==0:
-        xparts = yparts = int(sqrt(cellCount)); zparts, zspan = 0, 1
-    else:
-        xparts = yparts = zparts = int(cellCount**(1/3))
-    res = 0.999
-    xmul, ymul, zmul = res*xparts/xspan, res*yparts/yspan, res*zparts/zspan
+    coMul = 1/blokSide # coMul is scale factor for x,y,z to rank,row,level
+    cellCount = nx*ny*nz
+    xparts, yparts, zparts = nx, ny, nz
     xstep = 1; ystep = xparts; zstep = ystep*yparts
-    
+        
     #-----------------------------------------
-    # Make lists of points in various cells.
-    cellCount = zstep*max(1,zparts)
-    cells = [None]*cellCount
+    # Given a point, compute its cell number
     def calcCellNum(p):
         dx, dy, dz = p.x-xmin, p.y-ymin, p.z-zmin
-        return int(dx*xmul) + int(dy*ymul)*ystep + int(dz*zmul)*zstep
+        return int(dx*coMul) + int(dy*coMul)*ystep + int(dz*coMul)*zstep
+
+    #-----------------------------------------
+    # Make lists of points in cells
+    cells = [None]*cellCount
     for jp in range(nv):
         cellnum = calcCellNum(verts[jp]) # Put each vertex into a cell
         if cellnum >= cellCount: continue
         if not cells[cellnum]:
-             # Init cell when its first vertex occurs
+             # Init cell when the first vertex in it occurs
             cells[cellnum] = Cell(cellnum)
         cells[cellnum].addVert(jp, verts)
     for c in cells:
-        continue           # Optional: print each cell's list & limits
+        continue # comment this line to print each cell's list & limits
         if c:
             print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
 
     #-----------------------------------------
-    # Within each cell, test distance of every vertex pair
+    # Within each cell, test distances for all pairs.  For random
+    # data, time per cell is O(1) on average because O(popPerCell^2)
+    # is O(1), hence O(n) to do all cells on average in random case.
+    # But if some cells have O(n) points and cost O(n^2), we will have
+    # O(n^2) overall cost.  Generally, if O(n^p) cells have O(n^(1-p))
+    # points each, cost is O(n^(2-p)), which is asymptotic to O(n^2)
+    # as p goes to zero.
     for c in cells:
         if not c: continue
         cv = c.vList
         lcv = len(cv)
         for jp in range(lcv):   # For each vertex in cell, test its
-            p = verts[cv[jp]]   # distance to other vertices in cell
+            p = verts[cv[jp]]   #   distance to other vertices in cell
             for kq in range(jp+1, lcv):
                 q = verts[cv[kq]]
                 d2 = (p-q).mag2()   # Squared distance of p and q
@@ -351,32 +352,33 @@ def doAMethod(verts):    # A usually-faster method than brute force
     # Process layers or shells of cells, working outwards
     shellThik2 = min(xspan/xparts, yspan/yparts)**2
     smp = makeShellList()       # create ordered list of cells for visits
-    cshell = tuple((kx, ky, max(0,kx-1)**2+max(0,ky-1)**2) for os, nu, ru, fi, kx, ky, rf in smp)
+    #cshell = tuple((kx, ky, max(0,kx-1)**2+max(0,ky-1)**2) for os, nu, ru, fi, kx, ky, rf in smp)
     for c in cells:
         if not c: continue      # Skip empty cells
         cellnum = c.cell
+        atx, aty = cellnum % ystep, cellnum // ystep
         for jp in c.vList:
             p = verts[jp]
             # (if p distances**2 to cell edge > p.BSF no need to
             # access nbr but we don't test that in early version)
             # Treat neighbor cells by distance ranks (with 2-fold symmetry)
-            for kx, ky, shell2 in cshell:
-                if shell2*shellThik2 > p.BSF:
+            #for kx, ky, shell2 in cshell:
+            for cOffset, nummer, finner, kx, ky, ruff in smp:
+                if not nummer(atx+kx,aty+ky):
+                    continue
+                if ruff > p.BSF:
                     break
-                for jj in range(4): # kx, ky = -ky, kx is for symmetry
-                    dx, dy, kx, ky = kx*xstep, ky*ystep, -ky, kx
-                    nbrCN = cellnum+dx+dy
-                    #print (f'cellnum {cellnum:4}  nbrCN {nbrCN:4}  kx {kx:2}  ky {ky:2}  shell2 {shell2}')
-                    if nbrCN<0 or nbrCN>=cellCount or not cells[nbrCN]:
-                        continue
-                    nbr = cells[nbrCN]
-                    mx = my = 0
-                    if dx > 0:    mx = nbr.vLo.x - p.x
-                    elif dx < 0:  mx = p.x - nbr.vHi.x
-                    if dy > 0:    my = nbr.vLo.y - p.y
-                    elif dy < 0:  my = p.y - nbr.vHi.y
-                    if mx*mx < p.BSF and my*my < p.BSF:
-                        nbr.setClosest(jp, verts)
+                nbrCN = cellnum+cOffset
+                nbr = cells[nbrCN]
+                if not nbr:
+                    continue
+                mx = my = 0
+                if kx > 0:    mx = nbr.vLo.x - p.x
+                elif kx < 0:  mx = p.x - nbr.vHi.x
+                if ky > 0:    my = nbr.vLo.y - p.y
+                elif ky < 0:  my = p.y - nbr.vHi.y
+                if mx*mx < p.BSF and my*my < p.BSF:
+                    nbr.setClosest(jp, verts)
     #visData(points, "wsA2", makeLabels=True, colorFunc=roro)
     #visData(points, "wsA3")
 
