@@ -168,21 +168,19 @@ def doAllPairs(verts):    # Use O(n^2) method for verification
 def doAMethod(verts):    # A usually-faster method than brute force
     '''Puts points in locality buckets, treats each bucket, then treats
     several shells of cells around each cell.  Is faster than brute
-    force method for n > ~ 80.  Time is O(n) for x-y data, vs brute
-    force method's O(n^2).  In 18 Nov version, shells in the x,y plane
-    are treated in order of increasing distance, with z levels not
-    tested or used.
+    force method for n > ~ 30.  Time is O(n) for random x-y data, vs
+    brute force method's O(n^2).  In current version (20 Nov), shells
+    in the x,y plane are treated in order of increasing distance, with
+    z levels not tested or used.
 
     Note, for comments about speeding up searches by distance-ordering
     of localities of points, see section 2 of "A fast all nearest
     neighbor algorithm for applications involving large point-clouds",
     by Jagan Sankaranarayanan, H. Samet, A. Varshney, 2007 (eg at
-    https://www.cs.umd.edu/~varshney/papers/jagan_CG07.pdf ) .  That
+    https://www.cs.umd.edu/~varshney/papers/jagan_CG07.pdf ).  That
     paper gives a more systematic method (usable for kNN problem) than
     the somewhat less precise, but simpler, methods here (ok for 1NN
-    problem, and might extend to kNN).
-
-    '''
+    problem, and might extend to kNN).    '''
 
     #-----------------------------------------
     # define color-selector function for debugging
@@ -199,37 +197,35 @@ def doAMethod(verts):    # A usually-faster method than brute force
     def makeShellList():
         # Start by defining criterion methods for handling neighbors
         # at cardinal-and-ordinal directions CAO =
-        # [N,S,E,W,NE,SE,SW,NW].  Number methods num# for # in CAO
-        # return True if the neighbor's row and column are in bounds.
-        # If a cell-number test fails, go on to next cell number.
-        # Rough-distance methods (thunks with embedded ruff values)
-        # return True if current block's distance from proposed
-        # neighbor block is below target.  Since we order the
-        # neighbors search by increasing rough distance, if a
-        # rough-distance test fails, all subsequent ruff tests will
-        # fail, so on failure we can break out of cells search and go
-        # on to next point in verts.  Fine-distance methods fin# for #
-        # in CAO return True if current point's distance from
-        # neighbor's nearest edge or corner distance is below
-        # target. If a fine-distance test fails, go on to next cell
-        # number.
-        def numNE(tx, ty): return tx < xparts and ty < yparts
-        def numSE(tx, ty): return tx < xparts and ty >= 0
-        def numSW(tx, ty): return tx >= 0     and ty >= 0
-        def numNW(tx, ty): return tx >= 0     and ty < yparts
-        def numN (tx, ty): return ty < yparts
-        def numS (tx, ty): return ty >= 0
-        def numE (tx, ty): return tx < xparts
-        def numW (tx, ty): return tx >= 0
+        # [N,S,E,W,NE,SE,SW,NW].  Number methods off# for # in CAO
+        # test if the neighbor's row and column are off the grid; if
+        # so, just go on to next cell number.  Rough-distance ruff is
+        # used to test if current block's distance from proposed
+        # neighbor block is good enough.  Because we order the
+        # neighbors search by increasing rough distance, if one
+        # rough-distance test fails, so will all subsequent ruff
+        # tests, letting us break out of current point's search.
+        # Fine-distance methods fin# for # in CAO return True if
+        # current point's distance from neighbor's nearest edge or
+        # corner distance is below target. If a fine-distance test
+        # fails, go on to next cell number.
+        def offNE(tx, ty): return tx >= xparts or ty >= yparts
+        def offSE(tx, ty): return tx >= xparts or ty <  0
+        def offSW(tx, ty): return tx <  0      or ty <  0
+        def offNW(tx, ty): return tx <  0      or ty >= yparts
+        def offN (tx, ty): return ty >= yparts
+        def offS (tx, ty): return ty <  0
+        def offE (tx, ty): return tx >= xparts
+        def offW (tx, ty): return tx <  0
 
-        def finNW(p,c,target): return (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < target
-        def finN (p,c,target): return (p.y-c.vLo.y)**2                   < target
-        def finNE(p,c,target): return (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 < target
-        def finE (p,c,target): return (p.x-c.vLo.x)**2                   < target
-        def finSE(p,c,target): return (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 < target
-        def finS (p,c,target): return (p.y-c.vHi.y)**2                   < target
-        def finSW(p,c,target): return (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < target
-        def finW (p,c,target): return (p.x-c.vHi.x)**2                   < target
+        def finNW(p,c): return (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < p.BSF
+        def finN (p,c): return (p.y-c.vLo.y)**2                   < p.BSF
+        def finNE(p,c): return (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 < p.BSF
+        def finE (p,c): return (p.x-c.vLo.x)**2                   < p.BSF
+        def finSE(p,c): return (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 < p.BSF
+        def finS (p,c): return (p.y-c.vHi.y)**2                   < p.BSF
+        def finSW(p,c): return (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < p.BSF
+        def finW (p,c): return (p.x-c.vHi.x)**2                   < p.BSF
 
         # Make shells map for first quadrant of neighbors
         smt, smp = [], []       # Shell maps temporary & permanent
@@ -243,16 +239,16 @@ def doAMethod(verts):    # A usually-faster method than brute force
         for dist2, kx, ky in sorted(smt):
             rufx, rufy = max(0,kx-1)*blokSide, max(0,ky-1)*blokSide
             ruff = rufx*rufx + rufy*rufy
-            for jj in range(4): # kx, ky = -ky, kx gets group
+            for jj in range(4): # kx, ky = -ky, kx gets group of 4
                 cOffset = kx*xstep + ky*ystep
                 grid = 1+(kx>0)-(kx<0) + 3*(1+(ky<0)-(ky>0))
-                nummer = (numNW, numN, numNE,
-                          numW, None,  numE,
-                          numSW, numS, numSE)[grid]
-                finner = (finNW, finN, finNE,
+                offgrid= (offNW, offN, offNE,
+                          offW, None,  offE,
+                          offSW, offS, offSE)[grid]
+                finer  = (finNW, finN, finNE,
                           finW, None,  finE,
                           finSW, finS, finSE)[grid]
-                todo = (cOffset, nummer, finner, kx, ky, ruff)
+                todo = (cOffset, offgrid, finer, kx, ky, ruff)
                 if abs(kx) < xparts and abs(ky) < yparts:
                     smp.append(todo)
                 kx, ky = -ky, kx
@@ -276,7 +272,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
     #-----------------------------------------
     # Compute cell block size to fit requisite blocks into occupied space
     xspan, yspan, zspan = xmax-xmin, ymax-ymin, zmax-zmin
-    cellCount = nv//Cell.popPerCell
+    cellCount = max(1, nv//Cell.popPerCell)
     if zspan > 0:
         vol = xspan*yspan*zspan            # occupied volume
         blokSide = (vol/cellCount)**(1/3)  # nominal cube-side
@@ -285,19 +281,19 @@ def doAMethod(verts):    # A usually-faster method than brute force
         blokSide = (vol/cellCount)**(1/2)  # nominal square-side
     nx, ny, nz = [max(2,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
     if zspan == 0: nz = 1
-    print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
-    print ('Raw counts, spans, and extents')
-    for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
-        print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
+    #print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
+    #print ('Raw counts, spans, and extents')
+    #for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
+    #    print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
     # Blocks may be too big or too small for computed block
     # counts, so recompute blokSide, given those counts
     blokSide = 0
     for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
         blokSide = max(blokSide, 1.001*s/n)
-    print ('New counts, spans, and extents')
-    for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
-        print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
-    print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
+    #print ('New counts, spans, and extents')
+    #for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
+    #    print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
+    #print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
 
     coMul = 1/blokSide # coMul is scale factor for x,y,z to rank,row,level
     cellCount = nx*ny*nz
@@ -350,9 +346,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
 
     #-----------------------------------------
     # Process layers or shells of cells, working outwards
-    shellThik2 = min(xspan/xparts, yspan/yparts)**2
     smp = makeShellList()       # create ordered list of cells for visits
-    #cshell = tuple((kx, ky, max(0,kx-1)**2+max(0,ky-1)**2) for os, nu, ru, fi, kx, ky, rf in smp)
     for c in cells:
         if not c: continue      # Skip empty cells
         cellnum = c.cell
@@ -363,21 +357,16 @@ def doAMethod(verts):    # A usually-faster method than brute force
             # access nbr but we don't test that in early version)
             # Treat neighbor cells by distance ranks (with 2-fold symmetry)
             #for kx, ky, shell2 in cshell:
-            for cOffset, nummer, finner, kx, ky, ruff in smp:
-                if not nummer(atx+kx,aty+ky):
+            for cOffset, offgrid, finer, kx, ky, ruff in smp:
+                if offgrid(atx+kx, aty+ky):
                     continue
                 if ruff > p.BSF:
                     break
-                nbrCN = cellnum+cOffset
-                nbr = cells[nbrCN]
+                nbr = cells[cellnum+cOffset]
                 if not nbr:
                     continue
                 mx = my = 0
-                if kx > 0:    mx = nbr.vLo.x - p.x
-                elif kx < 0:  mx = p.x - nbr.vHi.x
-                if ky > 0:    my = nbr.vLo.y - p.y
-                elif ky < 0:  my = p.y - nbr.vHi.y
-                if mx*mx < p.BSF and my*my < p.BSF:
+                if finer(p, nbr):
                     nbr.setClosest(jp, verts)
     #visData(points, "wsA2", makeLabels=True, colorFunc=roro)
     #visData(points, "wsA3")
