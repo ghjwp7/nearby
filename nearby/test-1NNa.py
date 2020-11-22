@@ -49,11 +49,11 @@ class Cell:
 
 #----------------------------------------------------------------
 class PNN(Point):
-    kNN = 6               # Number of nearest neighbors we will find
-    def __init__(self, x=0, y=0, z=0, noNbr=-1):
+    kNN = 4               # Number of nearest neighbors we will find
+    def __init__(self, x=0, y=0, z=0):
         self.x, self.y, self.z = x, y, z
         self.BSF  = [Cell.Big]*PNN.kNN  # Best measure found So Far
-        self.nBSF = [noNbr]*PNN.kNN     # index of best neighbor so far
+        self.nBSF = [-1]*PNN.kNN     # index of best neighbor so far
 
     def addNN(self, dist2, kq):
         # Add kq to the Best-So-Far list.  This code takes O(kNN) time
@@ -95,7 +95,7 @@ def tryFax(n):  # Find product bx*by ~ n.
         if bd > abs(tx*ty-n): bd, bx, by = abs(tx*ty-n), tx, ty
     return bx, by
 #----------------------------------------------------------------
-def makeTestData(npoints, ndim=2, salt=123457,
+def makeTestData(npoints, dstyl, ndim=2, salt=123457,
                  scale=1, region=inUnitSquare):
     '''Make npoints points of specified dimension (2 or 3)
     within a specified region.'''
@@ -105,12 +105,25 @@ def makeTestData(npoints, ndim=2, salt=123457,
     bx, by = tryFax(npoints)
 
     # Note, for more general cases with region check, will need for-loop
-    ra = [PNN(scale*random(), scale*random(),
-                  scale*zf(), i) for i in range(npoints)]
+    if dstyl==0:
+        ra = [PNN(scale*random(), scale*random(),
+                  scale*zf()) for i in range(npoints)]
     sn = int(round(npoints**0.5))
-    if 0: ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
-                  scale*zf(), i) for i in range(bx) for j in range(by)]
-    if 10: ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf(), i) for i in range(bx) for j in range(by)]
+    if dstyl==1:
+        ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
+                  scale*zf()) for i in range(bx) for j in range(by)]
+    if dstyl==2:
+        ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf()) for i in range(bx) for j in range(by)]
+    if dstyl==3:
+        hx, hy, dx, dy, r, ra = 0, 0, 0.23, 0.19, 1/5, []
+        for j in range(npoints):
+            hx = hx+r*dx*random();  hy =hy+r*dy*random()
+            if abs(hx)<1 and abs(hy)<1:
+                ra.append(PNN(scale*hx, scale*hy, zf()))
+            else:
+                dx, dy, hx, hy = -dy, dx, hx*0.7, hy*0.7
+            dx, dy = dx-dy/7, dy+dx/7 # spiral left
+            #if not region:  print (f'hx {hx:7.4f}   hy {hy:7.4f}   dx {dx:7.4f}   dy {dy:7.4f}   r {r:7.4f}')
     return ra
 #----------------------------------------------------------------
 def visData(verts, baseName, makeLabels=False,
@@ -409,15 +422,18 @@ if __name__ == '__main__':
     arn+=1; PCL   = argv[arn]      if len(argv)>arn else '20'
     arn+=1; ndim  = int(argv[arn]) if len(argv)>arn else 2
     arn+=1; labls = int(argv[arn]) if len(argv)>arn else 0
+    arn+=1; dstyl = int(argv[arn]) if len(argv)>arn else 3
     methodset = {'a':doAMethod, 'b':doAllPairs}
     # Do set of tests for each number in Point Count List
     ptime = 0
     for nverts in [int(v) for v in PCL.split()]:
-        baseName, datapoints = 'wsx', makeTestData(nverts, ndim=ndim)
+        PNN.kNN = max(1,nverts//11)
+        baseName = 'wsx'
+        datapoints = makeTestData(nverts, dstyl, ndim=ndim, region=None)
         for l in tcode:
             if l in methodset:
                 baseName = f'ws{l}'
-                datapoints = makeTestData(nverts, ndim=ndim)
+                datapoints = makeTestData(nverts, dstyl, ndim=ndim)
                 # Get number of points made (may differ from nverts)
                 nv = len(datapoints)
                 baseTime = time.time()
