@@ -12,16 +12,12 @@
 
 from random import seed, random
 from pypevue import Point    # x,y,z point, with numerous methods
-from math import sqrt, atan2, degrees
+from math import sqrt, sin, cos, asin, atan2, pi, degrees
 
-def testp(f, vers):
-    for iv, v in enumerate(vers):
-        if v.BSF[0] == v.BSF[1] < 11:
-            print (f'From {f}  iv {iv}  v {v}  nBSF {v.nBSF}  BSF {v.BSF}')
-            #breakpoint()
 #----------------------------------------------------------------
 class Cell:
     Big = 1e99            # Big is an upper limit on numeric data
+    eps = 1e-9            # Small number for zero-testing
     popPerCell = 3        # Desired vertex count per cell of partition
     def __init__(self, num):
         self.cell  = num
@@ -103,18 +99,16 @@ def makeTestData(npoints, dstyl, ndim=2, salt=123457,
     zf = random if ndim==3 else lambda:0
     # Compute  bx, by ~ npoints  in case we need them below
     bx, by = tryFax(npoints)
-
-    # Note, for more general cases with region check, will need for-loop
-    if dstyl==0:
-        ra = [PNN(scale*random(), scale*random(),
-                  scale*zf()) for i in range(npoints)]
     sn = int(round(npoints**0.5))
-    if dstyl==1:
+
+    # Note, more-general cases with region check need for-loop
+    
+    if dstyl==1:                # Rectangular grid of near-squares
         ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
                   scale*zf()) for i in range(bx) for j in range(by)]
-    if dstyl==2:
+    elif dstyl==2:              # Rectangular grid of near-triangles
         ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf()) for i in range(bx) for j in range(by)]
-    if dstyl==3:
+    elif dstyl==3:              # 2x2 square of random curves
         hx, hy, dx, dy, r, ra = 0, 0, 0.23, 0.19, 1/5, []
         for j in range(npoints):
             hx = hx+r*dx*random();  hy =hy+r*dy*random()
@@ -123,7 +117,22 @@ def makeTestData(npoints, dstyl, ndim=2, salt=123457,
             else:
                 dx, dy, hx, hy = -dy, dx, hx*0.7, hy*0.7
             dx, dy = dx-dy/7, dy+dx/7 # spiral left
-            #if not region:  print (f'hx {hx:7.4f}   hy {hy:7.4f}   dx {dx:7.4f}   dy {dy:7.4f}   r {r:7.4f}')
+    elif dstyl==4:                    # hemispherical shell randoms
+        ra = []
+        while len(ra) < npoints:
+            x, y, z = scale*random(), scale*random(), scale*zf()
+            r = x*x + y*y + z*z
+            if 1.1 > r > 0.9:
+                ra.append(PNN(x, y, abs(z)))
+    elif dstyl==5:              # hemispherical shell spiral
+        ra = [];  a, d = 15*pi/npoints, 1/npoints
+        for j in range(npoints):
+            x, y = cos(a*j)*j*d, sin(a*j)*j*d
+            ra.append(PNN(x, y, sqrt(1-x*x-y*y)))
+    else:                       # dstyl==0? - 1x1 uniform random
+        ra = [PNN(scale*random(), scale*random(),
+                  scale*zf()) for i in range(npoints)]
+    if not region: print(f'Created {len(ra)} {ndim}D points in style {dstyl}')
     return ra
 #----------------------------------------------------------------
 def visData(verts, baseName, makeLabels=False,
@@ -172,8 +181,8 @@ textSizeV={scale/79:6.3f};
 module oneVert(trans, colo)
    translate (v=trans) color(c=colo) sphere(d=ballSize);
 
-module oneArrow(trans, zAngle, colo, cylLen)
-   translate (v=trans) rotate(a=[0,90,zAngle]) color(c=colo)
+module oneArrow(trans, yAngle, zAngle, colo, cylLen)
+   translate (v=trans) rotate(a=[0,yAngle,zAngle]) color(c=colo)
       union () {'{'}
          cylinder(d=cylMainDiam, h=cylLen-ArrowLen-ballSize/2);
          translate ([0, 0, cylLen-ArrowLen-ballSize/2])
@@ -198,9 +207,12 @@ module oneLabel (trans, colo, siz, txt)
                 if kq < 0: continue
                 q = verts[kq]   # q is among nearest neighbors
                 dqp = q - p      # free vector, p to q
-                zAngle = f'{round(degrees(atan2(dqp.y, dqp.x)), 2):6.2f}'
-                cylLen = f'{dqp.mag():6.3f}'
-                fout.write (f'''  oneArrow([{str(p)}], {zAngle}, "{cocode}", {cylLen});\n''')
+                L = dqp.mag()
+                yAngle = f'{round(90-degrees(asin(min(1, max(-1, dqp.z/L)))), 2)}'
+                zAngle = f'{round(degrees(atan2(dqp.y, dqp.x)), 2)}'
+                cylLen = f'{L:6.3f}'
+                fout.write (f'''  oneArrow([{str(p)}], {yAngle}, {zAngle}, "{cocode}", {cylLen});\n''')
+
 #----------------------------------------------------------------
 def doAllPairs(verts):    # Use O(n^2) method for verification
     nv = len(verts)
@@ -320,24 +332,24 @@ def doAMethod(verts):    # A usually-faster method than brute force
     #-----------------------------------------
     # Compute cell block size to fit requisite blocks into occupied space
     xspan, yspan, zspan = xmax-xmin, ymax-ymin, zmax-zmin
-    cellCount = max(1, nv//Cell.popPerCell)
-    if zspan > 0:
-        vol = xspan*yspan*zspan            # occupied volume
-        blokSide = (vol/cellCount)**(1/3)  # nominal cube-side
-    else:
-        vol = xspan*yspan                  # occupied area
-        blokSide = (vol/cellCount)**(1/2)  # nominal square-side
-    nx, ny, nz = [max(2,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
-    if zspan == 0: nz = 1
+    xflat, yflat, zflat = [(1 if abs(s)<Cell.eps else 0) for s in (xspan,yspan,zspan)]
+    xmult, ymult, zmult = [(1 if abs(s)<Cell.eps else s) for s in (xspan,yspan,zspan)]
+    adim = 3 - xflat - yflat - zflat
+    ovol = xmult * ymult * zmult  # nominal occupied volume or area or length
+    cellCount = max(1, nv//Cell.popPerCell) # nominal cell count
+    blokSide = (ovol/cellCount)**(1/adim)   # nominal cube-side
+    nx, ny, nz = [max(1,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
+    nx, ny, nz = [max(1, f) for f in (xflat, yflat, zflat)]
     # Blocks may be too big or too small for computed block
     # counts, so recompute blokSide, given those counts
     blokSide = 0
     for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
         blokSide = max(blokSide, 1.001*s/n)
-    #print ('New counts, spans, and extents:')
-    #for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
-    #    print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
-    #print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
+    if 1:
+        print ('X, Y, Z  Parts, spans, and extents:')
+        for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
+            print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
+        print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
 
     coMul = 1/blokSide # coMul is scale factor for x,y,z to rank,row,level
     cellCount = nx*ny*nz
@@ -352,6 +364,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
 
     #-----------------------------------------
     # Make lists of points in cells
+    
     cells = [None]*cellCount
     for jp in range(nv):
         cellnum = calcCellNum(verts[jp]) # Put each vertex into a cell
@@ -422,12 +435,13 @@ if __name__ == '__main__':
     arn+=1; PCL   = argv[arn]      if len(argv)>arn else '20'
     arn+=1; ndim  = int(argv[arn]) if len(argv)>arn else 2
     arn+=1; labls = int(argv[arn]) if len(argv)>arn else 0
-    arn+=1; dstyl = int(argv[arn]) if len(argv)>arn else 3
+    arn+=1; dstyl = int(argv[arn]) if len(argv)>arn else 2
+    arn+=1; kNNi  = int(argv[arn]) if len(argv)>arn else 1
     methodset = {'a':doAMethod, 'b':doAllPairs}
     # Do set of tests for each number in Point Count List
     ptime = 0
     for nverts in [int(v) for v in PCL.split()]:
-        PNN.kNN = max(1,nverts//11)
+        PNN.kNN = kNNi
         baseName = 'wsx'
         datapoints = makeTestData(nverts, dstyl, ndim=ndim, region=None)
         for l in tcode:

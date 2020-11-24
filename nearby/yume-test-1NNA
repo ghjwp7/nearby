@@ -3,11 +3,15 @@
 yume -ex -la 'ls -l' 'echo; date;ls -l'  -la 'wc *py' 'echo; date;wc *py' \
          -la 'wc *scad' 'echo; date;wc *scad' -la 'Rego' "%+$0"\
   -bu -la 'echo Point Count List is: $NP' -la "Point Count List:" -la NP -iv '100 200 400 800' \
-  -bu -la 'test-1NN avbv, both+visualize'  'echo; ./test-1NNa.py avbv "$NP"; echo "At `date` diff ws[ab].scad|wc -l says `diff ws[ab].scad|wc -l` lines"' \
+  -bu -la 'echo Ndims Labls Dstyl kNN: $OP' -la "Ndims Labls Dstyl kNN:" -la OP -iv '2 0 0 1' \
+  -bu ''\
+  -bu -la 'test-1NN avbv  (both+visualize)'  'echo; ./test-1NNa.py avbv "$NP" $OP; echo "At `date` diff ws[ab].scad|wc -l says `diff ws[ab].scad|wc -l` lines"' \
+  -bu -la 'diff ws[ab].scad | wc'  'echo "At `date` diff ws[ab].scad | wc -l says: `diff ws[ab].scad | wc` lines"' \
   -bu -la 'diff ws[ab].scad'  'echo "At `date` diff ws[ab].scad says:"; diff ws[ab].scad' \
-  -bu -la 'test-1NN av, AMethod+visualize' 'echo; ./test-1NNa.py av "$NP"' \
-  -bu -la 'test-1NN bv, basic + visualize' 'echo; ./test-1NNa.py bv "$NP"' \
-  -bu -la 'test-1NN av, AMethod+vis+label' 'echo; ./test-1NNa.py av "$NP" 2 1' \
-  -bu -la 'test-1NN bv, basic + vis+label' 'echo; ./test-1NNa.py bv "$NP" 2 1' \
-  -bu -la 'test-1NN a, Amethod'            'echo; ./test-1NNa.py a  "$NP"'\
-  -bu -la 'test-1NN b, basic  '            'echo; ./test-1NNa.py b  "$NP"'
+  -bu ''\
+  -bu -la 'test-1NN av, AMethod+visualize' 'echo; ./test-1NNa.py av "$NP" $OP' \
+  -bu -la 'test-1NN bv, basic + visualize' 'echo; ./test-1NNa.py bv "$NP" $OP' \
+  -bu ''\
+  -bu -la 'test-1NN ab  (both, no vis)'  'echo; ./test-1NNa.py ab "$NP" $OP; echo "At `date` diff ws[ab].scad|wc -l says `diff ws[ab].scad|wc -l` lines"' \
+  -bu -la 'test-1NN a, Amethod'            'echo; ./test-1NNa.py a  "$NP" $OP'\
+  -bu -la 'test-1NN b, basic  '            'echo; ./test-1NNa.py b  "$NP" $OP'
