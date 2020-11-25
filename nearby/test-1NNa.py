@@ -255,69 +255,120 @@ def doAMethod(verts):    # A usually-faster method than brute force
     #-----------------------------------------
     # Create distance-ordered list of neighbor cells (shells of cells)
     def makeShellList():
-        # Start by defining criterion methods for handling neighbors
-        # at cardinal-and-ordinal directions CAO =
-        # [N,S,E,W,NE,SE,SW,NW].  Number methods off# for # in CAO
-        # test if the neighbor's row and column are off the grid; if
-        # so, just go on to next cell number.  Rough-distance ruff is
-        # used to test if current block's distance from proposed
-        # neighbor block is good enough.  Because we order the
-        # neighbors search by increasing rough distance, if one
-        # rough-distance test fails, so will all subsequent ruff
-        # tests, letting us break out of current point's search.
-        # Fine-distance methods fin# for # in CAO return True if
-        # current point's distance from neighbor's nearest edge or
-        # corner distance is below target. If a fine-distance test
-        # fails, go on to next cell number.
-        def offNE(tx, ty): return tx >= xparts or ty >= yparts
-        def offSE(tx, ty): return tx >= xparts or ty <  0
-        def offSW(tx, ty): return tx <  0      or ty <  0
-        def offNW(tx, ty): return tx <  0      or ty >= yparts
-        def offN (tx, ty): return ty >= yparts
-        def offS (tx, ty): return ty <  0
-        def offE (tx, ty): return tx >= xparts
-        def offW (tx, ty): return tx <  0
-
-        def finNW(p,c): return (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0]
-        def finN (p,c): return (p.y-c.vLo.y)**2                   < p.BSF[0]
-        def finNE(p,c): return (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 < p.BSF[0]
-        def finE (p,c): return (p.x-c.vLo.x)**2                   < p.BSF[0]
-        def finSE(p,c): return (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 < p.BSF[0]
-        def finS (p,c): return (p.y-c.vHi.y)**2                   < p.BSF[0]
-        def finSW(p,c): return (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0]
-        def finW (p,c): return (p.x-c.vHi.x)**2                   < p.BSF[0]
+        # Number methods off# test if the neighbor's row and column
+        # are off the grid; if so, caller goes to next cell number.
+        offN = {
+            -1: lambda x,y,z: y >= yparts or z <  0,
+            -0: lambda x,y,z: y >= yparts,
+            +1: lambda x,y,z: y >= yparts or z >= zparts}
+        offNE = {
+            -1: lambda x,y,z: x >= xparts or y >= yparts or z <  0,
+            -0: lambda x,y,z: x >= xparts or y >= yparts,
+            +1: lambda x,y,z: x >= xparts or y >= yparts or z >= zparts}
+        offE = {
+            -1: lambda x,y,z: x >= xparts or z <  0,
+            -0: lambda x,y,z: x >= xparts,
+            +1: lambda x,y,z: x >= xparts or z >= zparts}
+        offSE = {
+            -1: lambda x,y,z: x >= xparts or y <  0      or z <  0,
+            -0: lambda x,y,z: x >= xparts or y <  0,
+            +1: lambda x,y,z: x >= xparts or y <  0      or z >= zparts}
+        offS = {
+            -1: lambda x,y,z: y <  0      or z <  0,
+            -0: lambda x,y,z: y <  0,
+            +1: lambda x,y,z: y <  0      or z >= zparts}
+        offSW = {
+            -1: lambda x,y,z: x <  0      or y <  0      or z <  0,
+            -0: lambda x,y,z: x <  0      or y <  0,
+            +1: lambda x,y,z: x <  0      or y <  0      or z >= zparts}
+        offW = {
+            -1: lambda x,y,z: x <  0      or z <  0,
+            -0: lambda x,y,z: x <  0,
+            +1: lambda x,y,z: x <  0      or z >= zparts}
+        offNW = {
+            -1: lambda x,y,z: x <  0      or y >= yparts or z <  0,
+            -0: lambda x,y,z: x <  0      or y >= yparts,
+            +1: lambda x,y,z: x <  0      or y >= yparts or z >= zparts}
+        
+        # Fine-distance methods fin# test if current point's distance
+        # from neighbor's nearest datum is below target. If a
+        # fine-distance test fails, caller goes to next cell number.
+        finN = {
+            -1: lambda p,c: (p.y-c.vLo.y)**2  + (p.z-c.vHi.z)**2  < p.BSF[0],
+            +0: lambda p,c: (p.y-c.vLo.y)**2                      < p.BSF[0],
+            +1: lambda p,c: (p.y-c.vLo.y)**2  + (p.z-c.vLo.z)**2  < p.BSF[0] }
+        finNW = {
+            -1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            +0: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0],
+            +1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+        finNE = {
+            -1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            +0: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 < p.BSF[0],
+            +1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+        finE = {
+            -1: lambda p, c:                  (p.x-c.vLo.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            -0: lambda p, c:                  (p.x-c.vLo.x)**2                   < p.BSF[0],
+            +1: lambda p, c:                  (p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+        finSE = {
+            -1: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            -0: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2                   < p.BSF[0],
+            +1: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+        finS = {
+            -1: lambda p, c: (p.y-c.vHi.y)**2                  +(p.z-c.vHi.z)**2 < p.BSF[0],
+            -0: lambda p, c: (p.y-c.vHi.y)**2                                    < p.BSF[0],
+            +1: lambda p, c: (p.y-c.vHi.y)**2                  +(p.z-c.vLo.z)**2 < p.BSF[0] }
+        finSW = {
+            -1: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            +0: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0],
+            +1: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+        finW = {
+            -1: lambda p,c:                   (p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            +0: lambda p,c:                   (p.x-c.vHi.x)**2 < p.BSF[0],
+            +1: lambda p,c:                   (p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] } 
 
         # Make shells map for first quadrant of neighbors
         smt, smr = [], []       # Shell maps temporary & real
         # Create temporary map to sort into shells order
         for i in range(1,xparts):
             ii = i*i
-            smt.append((ii, i, 0))
+            smt.append((ii, i, 0, 0))
             for j in range(1,yparts):
-                smt.append((ii+j*j, i, j))
+                jj = j*j
+                smt.append((ii+jj, i, j, 0))
+                for k in range(1,zparts):
+                    smt.append((ii+jj+k*k, i, j, k))
+                
         # Create real map with 4x entries using symmetry
-        for dist2, kx, ky in sorted(smt):
-            rufx, rufy = max(0,kx-1)*blokSide, max(0,ky-1)*blokSide
-            ruff = rufx*rufx + rufy*rufy
-            for jj in range(4): # kx, ky = -ky, kx gets group of 4
-                cOffset = kx*xstep + ky*ystep
-                grid = 1+(kx>0)-(kx<0) + 3*(1+(ky<0)-(ky>0))
-                offgrid= (offNW, offN, offNE,
-                          offW, None,  offE,
-                          offSW, offS, offSE)[grid]
-                finer  = (finNW, finN, finNE,
-                          finW, None,  finE,
-                          finSW, finS, finSE)[grid]
-                todo = (cOffset, offgrid, finer, kx, ky, ruff)
-                if abs(kx) < xparts and abs(ky) < yparts:
-                    smr.append(todo)
-                kx, ky = -ky, kx
+        for dist2, kx, ky, kz in sorted(smt):
+            # Rough distances test if current block's distance from
+            # proposed neighbor block is good enough.  Neighbors
+            # search is ordered by increasing ruff.  If a ruff test
+            # fails, all subsequent ruff tests would also fail, so
+            # break out of current point's search on first fail.
+            rx, ry, rz = [max(0,k-1)*blokSide for k in (kx, ky, kz)]
+            ruff = rx*rx + ry*ry + rz*rz
+            for kk in (-kz, +kz):
+                zz = 1 if kk else 0
+                for jj in range(4): # kx, ky = -ky, kx gets group of 4
+                    cOffset = kx*xstep + ky*ystep + kz*zstep
+                    grid = 1+(kx>0)-(kx<0) + 3*(1+(ky<0)-(ky>0))
+                    offgrid= (offNW[zz], offN[zz], offNE[zz],
+                              offW [zz],   None,   offE [zz],
+                              offSW[zz], offS[zz], offSE[zz]) [grid]
+                    finer  = (finNW[zz], finN[zz], finNE[zz],
+                              finW [zz],   None,   finE [zz],
+                              finSW[zz], finS[zz], finSE[zz]) [grid]
+                    todo = (cOffset, offgrid, finer, kx, ky, kz, ruff)
+                    if abs(kx) < xparts and abs(ky) < yparts:
+                        smr.append(todo)
+                    kx, ky = -ky, kx
+                if not kz: break
         return smr
 
     #-----------------------------------------
     # doAMethod() wants at least 2 vertices
-    nv = len(verts)
-    if nv < 2: return
+    nverts = len(verts)
+    if nverts < 2: return
     
     #-----------------------------------------
     # Find min & max values on each axis
@@ -336,16 +387,16 @@ def doAMethod(verts):    # A usually-faster method than brute force
     xmult, ymult, zmult = [(1 if abs(s)<Cell.eps else s) for s in (xspan,yspan,zspan)]
     adim = 3 - xflat - yflat - zflat
     ovol = xmult * ymult * zmult  # nominal occupied volume or area or length
-    cellCount = max(1, nv//Cell.popPerCell) # nominal cell count
+    cellCount = max(1, nverts//Cell.popPerCell) # nominal cell count
     blokSide = (ovol/cellCount)**(1/adim)   # nominal cube-side
     nx, ny, nz = [max(1,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
-    nx, ny, nz = [max(1, f) for f in (xflat, yflat, zflat)]
+    #nx, ny, nz = [max(1, f) for f in (xflat, yflat, zflat)]
     # Blocks may be too big or too small for computed block
     # counts, so recompute blokSide, given those counts
     blokSide = 0
     for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
         blokSide = max(blokSide, 1.001*s/n)
-    if 1:
+    if 0:
         print ('X, Y, Z  Parts, spans, and extents:')
         for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
             print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
@@ -366,7 +417,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
     # Make lists of points in cells
     
     cells = [None]*cellCount
-    for jp in range(nv):
+    for jp in range(nverts):
         cellnum = calcCellNum(verts[jp]) # Put each vertex into a cell
         if cellnum >= cellCount: continue
         if not cells[cellnum]:
@@ -406,14 +457,14 @@ def doAMethod(verts):    # A usually-faster method than brute force
     for c in cells:
         if not c: continue      # Skip empty cells
         cellnum = c.cell
-        atx, aty = cellnum % ystep, cellnum // ystep
+        atx, aty, atz = cellnum % ystep, (cellnum//ystep)%zstep, cellnum//zstep
         for jp in c.vList:
             p = verts[jp]
             # (if p distances**2 to cell edge > p.BSF[0] no need to
             # access nbr but we don't test that in early version)
             # Treat neighbor cells by distance ranks
-            for cOffset, offgrid, finer, kx, ky, ruff in smr:
-                if offgrid(atx+kx, aty+ky):
+            for cOffset, offgrid, finer, kx, ky, kz, ruff in smr:
+                if offgrid(atx+kx, aty+ky, atz+kz):
                     continue
                 if ruff > p.BSF[0]:
                     break
@@ -440,21 +491,21 @@ if __name__ == '__main__':
     methodset = {'a':doAMethod, 'b':doAllPairs}
     # Do set of tests for each number in Point Count List
     ptime = 0
-    for nverts in [int(v) for v in PCL.split()]:
+    for nvertices in [int(v) for v in PCL.split()]:
         PNN.kNN = kNNi
         baseName = 'wsx'
-        datapoints = makeTestData(nverts, dstyl, ndim=ndim, region=None)
+        datapoints = makeTestData(nvertices, dstyl, ndim=ndim, region=None)
         for l in tcode:
             if l in methodset:
                 baseName = f'ws{l}'
-                datapoints = makeTestData(nverts, dstyl, ndim=ndim)
-                # Get number of points made (may differ from nverts)
-                nv = len(datapoints)
+                datapoints = makeTestData(nvertices, dstyl, ndim=ndim)
+                # Get number of points made (may differ from nvertices)
+                nverts = len(datapoints)
                 baseTime = time.time()
                 methodset[l](datapoints)
                 ctime = time.time() - baseTime
                 if ptime==0: ptime = ctime
-                print (f'Test time for {l} with {nv} points: {ctime:3.6f} seconds = {ctime/ptime:5.3f} x previous')
+                print (f'Test time for {l} with {nverts} points: {ctime:3.6f} seconds = {ctime/ptime:5.3f} x previous')
                 ptime = ctime
             if l=='v':    # Visualization: Generates SCAD code in baseName file
                 visData(datapoints, baseName, makeLabels=labls)
