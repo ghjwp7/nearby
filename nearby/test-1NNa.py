@@ -13,7 +13,7 @@
 from random import seed, random
 from pypevue import Point    # x,y,z point, with numerous methods
 from math import sqrt, sin, cos, asin, atan2, pi, degrees
-
+from copy import deepcopy
 #----------------------------------------------------------------
 class Cell:
     Big = 1e99            # Big is an upper limit on numeric data
@@ -75,7 +75,6 @@ class PNN(Point):
             else:
                 break
         self.BSF[bat], self.nBSF[bat] = dist2, kq
-                
 #----------------------------------------------------------------
 def inUnitSquare(p):            # Return True if p is in region
     return 1 >= p.x >= 0 and 1 >= p.y >= 0
@@ -124,15 +123,19 @@ def makeTestData(npoints, dstyl, ndim=2, salt=123457,
             r = x*x + y*y + z*z
             if 1.1 > r > 0.9:
                 ra.append(PNN(x, y, abs(z)))
-    elif dstyl==5:              # hemispherical shell spiral
-        ra = [];  a, d = 15*pi/npoints, 1/npoints
+    elif dstyl==5:              # hemispherical shell spirals
+        ra = [];  a, d, cut = 15*pi/npoints, 1/npoints, npoints//3
         for j in range(npoints):
+            #if j>cut: d = .4/npoints
             x, y = cos(a*j)*j*d, sin(a*j)*j*d
-            ra.append(PNN(x, y, sqrt(1-x*x-y*y)))
+            z = sqrt(1-x*x-y*y)
+            if j>cut:   x += 0.26
+            if j>2*cut: y += 0.27
+            ra.append(PNN(x, y, z))
     else:                       # dstyl==0? - 1x1 uniform random
         ra = [PNN(scale*random(), scale*random(),
                   scale*zf()) for i in range(npoints)]
-    if not region: print(f'Created {len(ra)} {ndim}D points in style {dstyl}')
+    #if not region: print(f'Created {len(ra)} {ndim}D points in style {dstyl}')
     return ra
 #----------------------------------------------------------------
 def visData(verts, baseName, makeLabels=False,
@@ -164,7 +167,7 @@ def visData(verts, baseName, makeLabels=False,
     colist = ('Black','Red','Green','Yellow','Blue','Magenta','Cyan','White','Orange')
     cocount, xoff = len(colist), Point(0.01, 0, 0)
     with open(filename, 'w') as fout:
-        fout.write (f'''// File {filename}, generated  {dt}
+        fout.write (f'''// File {filename}, generated  {dt} by 1NNa with Ndim: {ndim}  Labls: {labls}  Dstyl: {dstyl}  kNN: {kNNi}
 // Number of sides for round things
 $fn=31;
 // Main diameter of cylinder
@@ -181,7 +184,7 @@ textSizeV={scale/79:6.3f};
 module oneVert(trans, colo)
    translate (v=trans) color(c=colo) sphere(d=ballSize);
 
-module oneArrow(trans, yAngle, zAngle, colo, cylLen)
+module oneArrow(trans, yAngle, zAngle, colo, cylLen, head, tail)
    translate (v=trans) rotate(a=[0,yAngle,zAngle]) color(c=colo)
       union () {'{'}
          cylinder(d=cylMainDiam, h=cylLen-ArrowLen-ballSize/2);
@@ -190,7 +193,7 @@ module oneArrow(trans, yAngle, zAngle, colo, cylLen)
       {'}'}
 module oneLabel (trans, colo, siz, txt)
     translate (v=trans) color(c=colo)
-        linear_extrude(0.06) text(size=siz, text=txt);
+        linear_extrude(0.006) text(size=siz, text=txt);
 
 ''')
         for jp, p in enumerate(verts):
@@ -211,7 +214,7 @@ module oneLabel (trans, colo, siz, txt)
                 yAngle = f'{round(90-degrees(asin(min(1, max(-1, dqp.z/L)))), 2)}'
                 zAngle = f'{round(degrees(atan2(dqp.y, dqp.x)), 2)}'
                 cylLen = f'{L:6.3f}'
-                fout.write (f'''  oneArrow([{str(p)}], {yAngle}, {zAngle}, "{cocode}", {cylLen});\n''')
+                fout.write (f'''  oneArrow([{str(p)}], {yAngle}, {zAngle}, "{cocode}", {cylLen}, {jp}, {kq});\n''')
 
 #----------------------------------------------------------------
 def doAllPairs(verts):    # Use O(n^2) method for verification
@@ -289,6 +292,10 @@ def doAMethod(verts):    # A usually-faster method than brute force
             -1: lambda x,y,z: x <  0      or y >= yparts or z <  0,
             -0: lambda x,y,z: x <  0      or y >= yparts,
             +1: lambda x,y,z: x <  0      or y >= yparts or z >= zparts}
+        offZ = {
+            -1: lambda x,y,z: z <  0,
+            -0: lambda x,y,z: True,
+            +1: lambda x,y,z: z >= zparts }
         
         # Fine-distance methods fin# test if current point's distance
         # from neighbor's nearest datum is below target. If a
@@ -296,74 +303,110 @@ def doAMethod(verts):    # A usually-faster method than brute force
         finN = {
             -1: lambda p,c: (p.y-c.vLo.y)**2  + (p.z-c.vHi.z)**2  < p.BSF[0],
             +0: lambda p,c: (p.y-c.vLo.y)**2                      < p.BSF[0],
-            +1: lambda p,c: (p.y-c.vLo.y)**2  + (p.z-c.vLo.z)**2  < p.BSF[0] }
-        finNW = {
-            -1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
-            +0: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0],
-            +1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+            +1: lambda p,c: (p.y-c.vLo.y)**2  + (p.z-c.vLo.z)**2  < p.BSF[0]}
         finNE = {
             -1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
             +0: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 < p.BSF[0],
-            +1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+            +1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0]}
         finE = {
             -1: lambda p, c:                  (p.x-c.vLo.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
             -0: lambda p, c:                  (p.x-c.vLo.x)**2                   < p.BSF[0],
-            +1: lambda p, c:                  (p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+            +1: lambda p, c:                  (p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0]}
         finSE = {
             -1: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
             -0: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2                   < p.BSF[0],
-            +1: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+            +1: lambda p, c: (p.y-c.vHi.y)**2 +(p.x-c.vLo.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0]}
         finS = {
             -1: lambda p, c: (p.y-c.vHi.y)**2                  +(p.z-c.vHi.z)**2 < p.BSF[0],
             -0: lambda p, c: (p.y-c.vHi.y)**2                                    < p.BSF[0],
-            +1: lambda p, c: (p.y-c.vHi.y)**2                  +(p.z-c.vLo.z)**2 < p.BSF[0] }
+            +1: lambda p, c: (p.y-c.vHi.y)**2                  +(p.z-c.vLo.z)**2 < p.BSF[0]}
         finSW = {
             -1: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
             +0: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0],
-            +1: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] }
+            +1: lambda p,c: (p.y-c.vHi.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0]}
         finW = {
             -1: lambda p,c:                   (p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
             +0: lambda p,c:                   (p.x-c.vHi.x)**2 < p.BSF[0],
-            +1: lambda p,c:                   (p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0] } 
+            +1: lambda p,c:                   (p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0]}
+        finNW = {
+            -1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vHi.z)**2 < p.BSF[0],
+            +0: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 < p.BSF[0],
+            +1: lambda p,c: (p.y-c.vLo.y)**2 +(p.x-c.vHi.x)**2 +(p.z-c.vLo.z)**2 < p.BSF[0]}
+        finZ = {
+            -1: lambda p,c:                                     (p.z-c.vHi.z)**2 < p.BSF[0],
+            +0: lambda p,c:                                     False,
+            +1: lambda p,c:                                     (p.z-c.vLo.z)**2 < p.BSF[0]}
 
+        # Sorting function later used for de-dup because of duplicate entries
+        def fDist(t):
+            x, y, z = t[1], t[2], t[3]
+            ss = x*x + y*y + z*z
+            uid = x/100103 + y/119311 + z/139339
+            return ss + uid
+        
         # Make shells map for first quadrant of neighbors
-        smt, smr = [], []       # Shell maps temporary & real
+        sma, smb, smc, smd = [], [], [], []    # Shell map temporaries
         # Create temporary map to sort into shells order
-        for i in range(1,xparts):
+        for i in range(xparts):
             ii = i*i
-            smt.append((ii, i, 0, 0))
-            for j in range(1,yparts):
+            for j in range(yparts):
                 jj = j*j
-                smt.append((ii+jj, i, j, 0))
-                for k in range(1,zparts):
-                    smt.append((ii+jj+k*k, i, j, k))
-                
+                for k in range(zparts):
+                    sma.append((ii+jj+k*k, i, j, k))
+
         # Create real map with 4x entries using symmetry
-        for dist2, kx, ky, kz in sorted(smt):
+        for dist2, kx, ky, kzin in sorted(sma):
+            if kx==ky==kzin==0: continue  # all-zeroes not allowed
             # Rough distances test if current block's distance from
             # proposed neighbor block is good enough.  Neighbors
             # search is ordered by increasing ruff.  If a ruff test
             # fails, all subsequent ruff tests would also fail, so
             # break out of current point's search on first fail.
-            rx, ry, rz = [max(0,k-1)*blokSide for k in (kx, ky, kz)]
+            rx, ry, rz = [max(0,k-1)*blokSide for k in (kx, ky, kzin)]
             ruff = rx*rx + ry*ry + rz*rz
-            for kk in (-kz, +kz):
-                zz = 1 if kk else 0
+            for kz in (-kzin, +kzin):
+                unit = -1 if kz<0 else (1 if kz>0 else 0)
+                #print (f'kx, ky, kz: {kx:3} {ky:3} {kz:3}  unit: {unit:2}  ruff: {ruff:0.4} bS {blokSide:0.4} rx {rx:0.4}  ry {ry:0.4}  rz {rz:0.4}')
                 for jj in range(4): # kx, ky = -ky, kx gets group of 4
                     cOffset = kx*xstep + ky*ystep + kz*zstep
                     grid = 1+(kx>0)-(kx<0) + 3*(1+(ky<0)-(ky>0))
-                    offgrid= (offNW[zz], offN[zz], offNE[zz],
-                              offW [zz],   None,   offE [zz],
-                              offSW[zz], offS[zz], offSE[zz]) [grid]
-                    finer  = (finNW[zz], finN[zz], finNE[zz],
-                              finW [zz],   None,   finE [zz],
-                              finSW[zz], finS[zz], finSE[zz]) [grid]
-                    todo = (cOffset, offgrid, finer, kx, ky, kz, ruff)
-                    if abs(kx) < xparts and abs(ky) < yparts:
-                        smr.append(todo)
+                    offgrid= (offNW[unit], offN[unit], offNE[unit],
+                              offW [unit], offZ[unit], offE [unit],
+                              offSW[unit], offS[unit], offSE[unit]) [grid]
+                    finer  = (finNW[unit], finN[unit], finNE[unit],
+                              finW [unit], finZ[unit], finE [unit],
+                              finSW[unit], finS[unit], finSE[unit]) [grid]
+                    todo = (cOffset, kx, ky, kz, ruff, offgrid, finer)
+                    #print (f'kx, ky, kz: {kx:3} {ky:3} {kz:3}  unit: {unit:2}  cOffset {cOffset}  fD: {fDist(todo):0.6f}')
+                    if abs(kx) < xparts and abs(ky) < yparts and abs(kz) < zparts:
+                        smb.append(todo)
                     kx, ky = -ky, kx
-                if not kz: break
-        return smr
+                    if kx==ky==0: break
+                if kz==0: break
+        del sma; #print ()
+        if 0:
+            for t in smb:
+                x, y, z = t[1], t[2], t[3]
+                print (f'b kxyz: {x:2} {y:2} {z:2}  fD: {fDist(t):0.6f}   os: {t[0]:3}  ruff: {t[4]:0.6f}')
+        smc = sorted(smb, key=fDist); smd = [smc[0]]
+        del smb; #print ()
+        if 0:
+            for t in smc:
+                x, y, z = t[1], t[2], t[3]
+                print (f'c kxyz: {x:2} {y:2} {z:2}  fD: {fDist(t):0.6f}   os: {t[0]:3}  ruff: {t[4]:0.6f}')
+        for j in range(1,len(smc)):
+            if fDist(smc[j]) > fDist(smd[-1]):
+                smd.append(smc[j])
+        del smc; #print ()
+        if 0:
+            #print (f'\n\nAfter de-dup, j={j}  len smr={len(smr)}')
+            #for cOffset, kx, ky, kz, ruff, offgrid, finer in smr:
+            #    print (f'fD {kx**2 + ky**2 + kz**2 - 1/cOffset:7.4f}   kxyz: {kx:3} {ky:3} {kz:3}   ruff: {ruff:0.4}')
+            print (f'After de-dup, j={j}  len smd={len(smd)}  steps {ystep} {zstep}\n')
+            for t in smd:
+                x, y, z = t[1], t[2], t[3]
+                print (f'd kxyz: {x:2} {y:2} {z:2}  fD: {fDist(t):0.6f}   os: {t[0]:3}  ruff: {t[4]:0.6f}')
+        return smd
 
     #-----------------------------------------
     # doAMethod() wants at least 2 vertices
@@ -400,7 +443,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
         print ('X, Y, Z  Parts, spans, and extents:')
         for n,s in ((nx,xspan),(ny,yspan),(nz,zspan)):
             print (f'n {n:4}  s {s:7.4f}  e {n*blokSide:7.4f}')
-        print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}')
+        print (f'cellCount {cellCount}   nxyz {nx*ny*nz}   blokSide {blokSide:7.4f}  ^2: {blokSide**2:7.4f}')
 
     coMul = 1/blokSide # coMul is scale factor for x,y,z to rank,row,level
     cellCount = nx*ny*nz
@@ -424,10 +467,10 @@ def doAMethod(verts):    # A usually-faster method than brute force
              # Init cell when the first vertex in it occurs
             cells[cellnum] = Cell(cellnum)
         cells[cellnum].addVert(jp, verts)
-    for c in cells:
-        continue # comment this line to print each cell's list & limits
-        if c:
-            print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
+    if 0:
+        for c in cells: # uncomment this block to print each cell's list & limits
+            if c and (1 or c.cell in [2,6,7]):
+                print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
 
     #-----------------------------------------
     # Within each cell, test distances for all pairs.  For random
@@ -451,29 +494,39 @@ def doAMethod(verts):    # A usually-faster method than brute force
                 if d2 < p.BSF[0]:  p.addNN(d2, kq)
                 if d2 < q.BSF[0]:  q.addNN(d2, jp)
     #visData(verts, "wsA1", makeLabels=True, colorFunc=roro)
+    #---debugging--------------------------------------
+    def vChek(t, jp):
+        for j in [0, 37, 38, 39]:
+            p = verts[j]
+            if vdeb[j] and vdeb[j].nBSF == p.nBSF:     continue
+            vdeb[j] = deepcopy(p)
+            print (f'v{j} / {jp:2} {t}  \tBSF: {[(x,round(v,3)) for x,v in zip(p.nBSF, p.BSF)]}')
     #-----------------------------------------
     # Process layers or shells of cells, working outwards
     smr = makeShellList()       # create ordered list of cells for visits
     for c in cells:
         if not c: continue      # Skip empty cells
         cellnum = c.cell
-        atx, aty, atz = cellnum % ystep, (cellnum//ystep)%zstep, cellnum//zstep
+        atx, aty, atz = cellnum % ystep, (cellnum%zstep)//ystep, cellnum//zstep
         for jp in c.vList:
             p = verts[jp]
             # (if p distances**2 to cell edge > p.BSF[0] no need to
             # access nbr but we don't test that in early version)
             # Treat neighbor cells by distance ranks
-            for cOffset, offgrid, finer, kx, ky, kz, ruff in smr:
+            for cOffset, kx, ky, kz, ruff, offgrid, finer in smr:
                 if offgrid(atx+kx, aty+ky, atz+kz):
                     continue
+                #if 49999+jp in [0, 37, 38, 39]:
+                #    print (f'v{jp}\t{atx} {aty} {atz} : c{cellnum} to c{cellnum+cOffset}\t os {kx} {ky} {kz} : {cOffset}  \tparts: {xparts} {yparts} {zparts}   step: {ystep} {zstep}  ruff {ruff:0.4f}')
                 if ruff > p.BSF[0]:
                     break
                 nbr = cells[cellnum+cOffset]
-                if not nbr:
-                    continue
+                if not nbr:  continue
+                #vChek('N', jp)
                 mx = my = 0
                 if finer(p, nbr):
                     nbr.setClosest(jp, verts)
+                #vChek('F', jp)
     #visData(verts, "wsA2", makeLabels=True, colorFunc=roro)
     #visData(verts, "wsA3")
 
@@ -491,6 +544,8 @@ if __name__ == '__main__':
     methodset = {'a':doAMethod, 'b':doAllPairs}
     # Do set of tests for each number in Point Count List
     ptime = 0
+    print ('\n')
+    vdeb = [None]*4999          # for debugging in a method
     for nvertices in [int(v) for v in PCL.split()]:
         PNN.kNN = kNNi
         baseName = 'wsx'
@@ -505,7 +560,7 @@ if __name__ == '__main__':
                 methodset[l](datapoints)
                 ctime = time.time() - baseTime
                 if ptime==0: ptime = ctime
-                print (f'Test time for {l} with {nverts} points: {ctime:3.6f} seconds = {ctime/ptime:5.3f} x previous')
+                print (f'Test ({ndim} {labls} {dstyl} {kNNi}) for {l} with {nverts} points: {ctime:3.6f} seconds = {ctime/ptime:5.3f} x previous')
                 ptime = ctime
             if l=='v':    # Visualization: Generates SCAD code in baseName file
                 visData(datapoints, baseName, makeLabels=labls)
