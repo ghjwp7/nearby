@@ -1,0 +1,21 @@
+clean up code (delete debug printing or systematize it)
+
+make a package that installs
+
+set up test suite [need regression testing, to detect if errors cause
+stuff to stop working]
+
+add routine to accept a list of points to be removed from NN data, and
+remove them; substituting replacement data if available, else just
+drop the data; local fixups might or might not work easily or reliably
+vs re-doing whole thing?
+
+add routine to make a list of points to be removed.  Eg: (1) delete
+points within a given distance of each other, replacing with their
+average; (2) given distance could be a fraction of overall size; (3)
+for a given point, delete some of the points closest to it if their
+distances are a small fraction of the constellation size; (4) for a
+given point, remove (ie delist but not delete) some points from its NN
+list, if the distances are larger than a fraction of overall size or
+of constellation size;
+

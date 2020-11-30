@@ -1,0 +1,7 @@
+*.scad
+out
+t1-*
+t-*
+*~
+5grid.dxf
+__pycache__
