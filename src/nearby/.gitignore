@@ -4,5 +4,6 @@ out
 t1-*
 t-*
 *~
+*png
 5grid.dxf
 __pycache__

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+yume -ex \
+  -la 'echo $NP points, $NF faces' -la "# points:" -la NP -iv 11 \
+  -la 'echo $NP points, $NF faces' -la "# faces:"  -la NF -iv 11 \
+  -bu -la 'Test visualize' './delaunaymain.py vis $NP $NF' \
+      -la 'Test CC radius calcs' './delaunaymain.py value $NP $NF' \
+  -bu -la 'Test CC time, - cache, - vis' './delaunaymain.py time  $NP $NF' \
+      -la 'Test CC time, + cache, - vis' './delaunaymain.py cache $NP $NF' \
+  -bu -la 'Test CC time, - cache, - vis' './delaunaymain.py timevis  $NP $NF' \
+      -la 'Test CC time, + cache, - vis' './delaunaymain.py cachevis $NP $NF'
