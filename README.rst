@@ -8,21 +8,23 @@ Delaunay & k-nearest-neighbor methods
 Description
 ===========
 
-This package contains Python modules delaunay.py and kNN.py that
-accept lists of points (2D or 3D) and produce either
-k-nearest-neighbor or Delaunay triangulation data structures.
+In its src/ directory, this package has Python modules delaunay.py and
+kNN.py that accept lists of points (2D or 3D) and produce either
+k-nearest-neighbor or Delaunay triangulation data structures.  In its
+test/ directory, it has [at present] a few basic unit tests for parts
+of delaunay.py and delaunaymain.py.  Tests for kNN will be added later.
 
-When given 3D data and setup, this Delaunay program uses 3D metrics
-but basically 2D analysis.  Thus, the triangulations it makes for 3D
-data may be mediocre and might be unusable unless extra
-post-processing is done.
+When given 3D data and setup, the Delaunay program (method
+delaunay.Triangulate) uses 3D metrics but basically 2D analysis.
+Thus, the triangulations it makes for 3D data may be mediocre and
+might be unusable unless extra post-processing is done.
 
-Program delaunaymain.py is a demo program that generates random data
-sets of specified size; runs 2D or 3D circumcircle tests; and can use
-delaunayvis.py to produce SCAD code for visualization of solutions
-using OpenSCAD.  See file yume-delaunay-test re demos.  This needs to
-be modified to run Delaunay triangulation tests as well as just
-circumcircle tests.
+Program delaunaymain.py is a standalone demo program that generates
+random data sets of specified size; runs 2D or 3D **circumcircle**
+tests; and can use delaunayvis.py to produce SCAD code for
+visualization of solutions using OpenSCAD.  See file
+yume-delaunay-test re demos.  This needs to be modified to run
+Delaunay triangulation tests as well as just circumcircle tests.
 
 Two kNN routines are given.  The slower one is brute force and takes
 O(k*n*n) time (for n points and k neighbors) in current form.  It is

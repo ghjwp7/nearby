@@ -2,7 +2,7 @@
 
 
 from pypevue import Point
-from delaunay import CircumCircle2, CircumCircle3, Face
+from nearby.delaunay import CircumCircle2, CircumCircle3, Face
 
 def visData(points, faces, pIn, pOut):
     '''Visualization for output from delaunay.py: write openscad scad code

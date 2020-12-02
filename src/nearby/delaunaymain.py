@@ -4,8 +4,8 @@
 '''Some tests for circumcircle routines in autoAdder2d.py'''
 
 from pypevue import Point
-from delaunay import CircumCircle2, CircumCircle3, Face
-import delaunayvis
+from nearby.delaunay import CircumCircle2, CircumCircle3, Face
+from nearby import delaunayvis
 from random import seed, random
 import time, sys
 
