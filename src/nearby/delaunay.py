@@ -38,6 +38,10 @@ class Face:                     # Class for triangular faces
         return (min(s), max(s), sum(s))
 #==============================================================
 class Vert(Point):
+    # User can provide a CircumCircle-test routine;
+    # otherwise Triangulate will use CircumCircle2
+    CircumCircle = None
+
     def __init__(self, p, num):
         self.x, self.y, self.z, self.num = p.x, p.y, p.z, num
 #==============================================================
@@ -56,6 +60,8 @@ def Triangulate(pxy):
     # of code in 2D Delauney triangulation programs by: Paul Bourke,
     # c, 1989; fjenett, java, 2005; Gregory Seidman, ruby, 2006.  See
     # links at http://paulbourke.net/papers/triangulate/
+
+    if not Vert.CircumCircle: Vert.CircumCircle = CircumCircle2
 
     pxy.sort(key=lambda p: p.x) # Sort points on ascending x coordinate
     # Allocate memory for the completeness list, flag for each triangle
@@ -76,7 +82,7 @@ def Triangulate(pxy):
     pxy.append(Point(xmid - 20 * dmax, ymid - dmax))
     pxy.append(Point(xmid,        ymid + 20 * dmax))
     pxy.append(Point(xmid + 20 * dmax, ymid - dmax))
-    print (f'Super-triangle: ({pxy[-3]}), ({pxy[-2]}), ({pxy[-1]})\n')
+    #print (f'Super-triangle: ({pxy[-3]}), ({pxy[-2]}), ({pxy[-1]})\n')
     tris = [Face(nv, nv+1, nv+2)] # Start tris list with super-triangle
     cache = {}
     #  Add points one by one into tris, the present state of mesh
@@ -91,7 +97,7 @@ def Triangulate(pxy):
                 j += 1; continue # Skip tests if triangle j already done
             threep = [pxy[p] for p in tris[j].get123]
             # Get is-inside flag, center point c, r*r, d*d
-            inside, c, rr, dd = CircumCircle3(p, threep, tris[j].canon, cache)
+            inside, c, rr, dd = Vert.CircumCircle(p, threep, tris[j].canon, cache)
             #print (f'inside:{inside}   c:{c}   rr:{rr}   dd:{dd}')
             if c.x < p.x and dd > rr:
                 tris[j].complete = True # Due to x-sorting of pxy, j is done
@@ -136,7 +142,7 @@ def Triangulate(pxy):
             tris[o] = t
             o += 1
     tris = tris[:o]
-    return tris, cache
+    return pxy[:-3], tris, cache
 #==============================================================
 def CircumCircle2(p, threep, canon, cache):
     # Returns a four-tuple, (inside, xc, yc, rr) where `inside` is

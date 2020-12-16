@@ -1,15 +1,15 @@
 #!/usr/bin/python3
 # -*- mode: python;  coding: utf-8 -*-
-
+# J Waldby - November 2020
 '''Some tests for circumcircle routines in autoAdder2d.py'''
 
 from pypevue import Point
 from nearby.delaunay import CircumCircle2, CircumCircle3, Face
-from nearby import delaunayvis
+from nearby import delaunayCCvis
 from random import seed, random
 import time, sys
 
-def makeTestData(npoints, nfaces, style='xy', salt=123457, scale=10):
+def makeCCTestData(npoints, nfaces, style='xy', salt=123457, scale=10):
     '''Make npoints points of specified style, xy or xyz; make nfaces
     faces, and for each face a point in & out of it.'''
     # nfaces cannot exceed (npoints choose 3)
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     arn+=1; tcache = int(argv[arn]) if len(argv)>arn else 1
     arn+=1; haveZ  = int(argv[arn]) if len(argv)>arn else 0
     style = 'xyz' if haveZ else 'xy'
-    points, faces, pIn, pOut = makeTestData(nverts, nfaces, style=style)
+    points, faces, pIn, pOut = makeCCTestData(nverts, nfaces, style=style)
     
     def timeTest(tCache, note):
         timeTest1(CircumCircle2, points, faces, pIn, pOut, tCache, 'CC2'+note, 0)
@@ -94,4 +94,4 @@ if __name__ == '__main__':
         valTest(True)
 
     if tcode.endswith('vis'):   # Visualization (generates SCAD code)
-        delaunayvis.visData(points, faces, pIn, pOut)
+        delaunayCCvis.visCCData(points, faces, pIn, pOut)

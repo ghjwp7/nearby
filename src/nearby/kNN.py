@@ -76,147 +76,6 @@ class PNN(Point):
                 break
         self.BSF[bat], self.nBSF[bat] = dist2, kq
 #----------------------------------------------------------------
-def inUnitSquare(p):            # Return True if p is in region
-    return 1 >= p.x >= 0 and 1 >= p.y >= 0
-#----------------------------------------------------------------
-def tryFax(n):  # Find product bx*by ~ n.
-    sx = bx = by = tx = ty = round(n**0.5)
-    bd = abs(n - tx*tx)
-    while tx-ty < 11:
-        while tx*ty > n:
-            ty -= 1
-            if bd > abs(tx*ty-n): bd, bx, by = abs(tx*ty-n), tx, ty
-        tx += 1
-        if bd > abs(tx*ty-n): bd, bx, by = abs(tx*ty-n), tx, ty
-    return bx, by
-#----------------------------------------------------------------
-def makeTestData(npoints, dstyl, ndim=2, salt=123457,
-                 scale=1, region=inUnitSquare):
-    '''Make npoints points of specified dimension (2 or 3)
-    within a specified region.'''
-    seed(a=salt+npoints)
-    zf = random if ndim==3 else lambda:0
-    # Compute  bx, by ~ npoints  in case we need them below
-    bx, by = tryFax(npoints)
-    sn = int(round(npoints**0.5))
-
-    # Note, more-general cases with region check need for-loop
-    
-    if dstyl==1:                # Rectangular grid of near-squares
-        ra = [PNN(scale*i/(sn+random()/13), scale*j/(sn+random()/13),
-                  scale*zf()) for i in range(bx) for j in range(by)]
-    elif dstyl==2:              # Rectangular grid of near-triangles
-        ra = [PNN(scale*(i+(j%2)/2)/(sn+random()/13), scale*((3**0.5)/2)*j/(sn+random()/13), scale*zf()) for i in range(bx) for j in range(by)]
-    elif dstyl==3:              # 2x2 square of random curves
-        hx, hy, dx, dy, r, ra = 0, 0, 0.23, 0.19, 1/5, []
-        for j in range(npoints):
-            hx = hx+r*dx*random();  hy =hy+r*dy*random()
-            if abs(hx)<1 and abs(hy)<1:
-                ra.append(PNN(scale*hx, scale*hy, zf()))
-            else:
-                dx, dy, hx, hy = -dy, dx, hx*0.7, hy*0.7
-            dx, dy = dx-dy/7, dy+dx/7 # spiral left
-    elif dstyl==4:                    # hemispherical shell randoms
-        ra = []
-        while len(ra) < npoints:
-            x, y, z = scale*random(), scale*random(), scale*zf()
-            r = x*x + y*y + z*z
-            if 1.1 > r > 0.9:
-                ra.append(PNN(x, y, abs(z)))
-    elif dstyl==5:              # hemispherical shell spirals
-        ra = [];  a, d, cut = 15*pi/npoints, 1/npoints, npoints//3
-        for j in range(npoints):
-            #if j>cut: d = .4/npoints
-            x, y = cos(a*j)*j*d, sin(a*j)*j*d
-            z = sqrt(1-x*x-y*y)
-            if j>cut:   x += 0.26
-            if j>2*cut: y += 0.27
-            ra.append(PNN(x, y, z))
-    else:                       # dstyl==0? - 1x1 uniform random
-        ra = [PNN(scale*random(), scale*random(),
-                  scale*zf()) for i in range(npoints)]
-    #if not region: print(f'Created {len(ra)} {ndim}D points in style {dstyl}')
-    return ra
-#----------------------------------------------------------------
-def visData(verts, baseName, makeLabels=False,
-            colorFunc=lambda n1, n2: n1):
-    '''Given point data with embedded nearest neighbor numbers, write
-    openSCAD code for the nearest neighbor graph to file.
-
-    verts is a list of PNN objects (Point objects plus
-    nearest-neighbor info.)
-
-    baseName is a string, used as a base file name.  Output is written to
-    the file named by concatenating baseName with '.scad'.
-
-    Named parameter makeLabels is False by default.  It controls
-    whether vertex-labeling code gets generated.
-
-    Named parameter colorFunc by default is a function that returns
-    its first argument.  In general, colorFunc should return an
-    integer (to select a color from a color list, modulo its length)
-    or a string (a color name).  colorFunc's first argument n1 is a
-    vertex number.  If its second argument n2 is negative, colorFunc
-    returns a vertex-label color, else returns a color for an arrow
-    from vertex n1 to n2.    '''
-    import datetime
-    dt = datetime.datetime.today().strftime('%Y-%m-%d  %H:%M:%S')
-    filename = f'{baseName}.scad'
-    scale = 1
-    scale = 9/len(verts)**0.4
-    colist = ('Black','Red','Green','Yellow','Blue','Magenta','Cyan','White','Orange')
-    cocount, xoff = len(colist), Point(0.01, 0, 0)
-    with open(filename, 'w') as fout:
-        fout.write (f'''// File {filename}, generated  {dt} by 1NNa with Ndim: {ndim}  Labls: {labls}  Dstyl: {dstyl}  kNN: {kNNi}
-// Number of sides for round things
-$fn=31;
-// Main diameter of cylinder
-cylMainDiam={scale/247:0.3f};
-// Arrowhead max diameter
-ArrowMaxDiam={scale/153:0.3f};
-// Arrowhead length
-ArrowLen={scale/61:0.3f};
-// Diameter of sphere at vertex
-ballSize={scale/139:0.3f};
-// Height of Vertex label text
-textSizeV={scale/79:6.3f};
-
-module oneVert(trans, colo)
-   translate (v=trans) color(c=colo) sphere(d=ballSize);
-
-module oneArrow(trans, yAngle, zAngle, colo, cylLen, head, tail)
-   translate (v=trans) rotate(a=[0,yAngle,zAngle]) color(c=colo)
-      union () {'{'}
-         cylinder(d=cylMainDiam, h=cylLen-ArrowLen-ballSize/2);
-         translate ([0, 0, cylLen-ArrowLen-ballSize/2])
-            cylinder(d1=ArrowMaxDiam, d2=0, h=ArrowLen);
-      {'}'}
-module oneLabel (trans, colo, siz, txt)
-    translate (v=trans) color(c=colo)
-        linear_extrude(0.006) text(size=siz, text=txt);
-
-''')
-        for jp, p in enumerate(verts):
-            if makeLabels:
-                cocode = colorFunc(jp, -1)
-                if type(cocode)==int:  cocode = colist[cocode%cocount]
-                fout.write (f'''  oneLabel([{str(p+xoff)}], "{cocode}", textSizeV, "V{jp}");\n''')
-            kq = p.nBSF[-1]
-            cocode = colorFunc(jp, kq)
-            if type(cocode)==int:  cocode = colist[cocode%cocount]
-            fout.write (f'''  oneVert([{str(p)}], "{cocode}");\n''')
-            # Make arrows to nearest neighbors
-            for kq in p.nBSF:
-                if kq < 0: continue
-                q = verts[kq]   # q is among nearest neighbors
-                dqp = q - p      # free vector, p to q
-                L = dqp.mag()
-                yAngle = f'{round(90-degrees(asin(min(1, max(-1, dqp.z/L)))), 2)}'
-                zAngle = f'{round(degrees(atan2(dqp.y, dqp.x)), 2)}'
-                cylLen = f'{L:6.3f}'
-                fout.write (f'''  oneArrow([{str(p)}], {yAngle}, {zAngle}, "{cocode}", {cylLen}, {jp}, {kq});\n''')
-
-#----------------------------------------------------------------
 def doAllPairs(verts):    # Use O(n^2) method for verification
     nv = len(verts)
 
@@ -227,6 +86,7 @@ def doAllPairs(verts):    # Use O(n^2) method for verification
             d2 = (p-q).mag2()   # Squared distance of p and q
             if d2 < p.BSF[0]:  p.addNN(d2, kq)
             if d2 < q.BSF[0]:  q.addNN(d2, jp)
+    return verts
 #----------------------------------------------------------------
 def doAMethod(verts):    # A usually-faster method than brute force
     '''Puts points in locality buckets, treats each bucket, then treats
@@ -388,16 +248,18 @@ def doAMethod(verts):    # A usually-faster method than brute force
             for t in smb:
                 x, y, z = t[1], t[2], t[3]
                 print (f'b kxyz: {x:2} {y:2} {z:2}  fD: {fDist(t):0.6f}   os: {t[0]:3}  ruff: {t[4]:0.6f}')
-        smc = sorted(smb, key=fDist); smd = [smc[0]]
-        del smb; #print ()
-        if 0:
-            for t in smc:
-                x, y, z = t[1], t[2], t[3]
-                print (f'c kxyz: {x:2} {y:2} {z:2}  fD: {fDist(t):0.6f}   os: {t[0]:3}  ruff: {t[4]:0.6f}')
-        for j in range(1,len(smc)):
-            if fDist(smc[j]) > fDist(smd[-1]):
-                smd.append(smc[j])
-        del smc; #print ()
+        if len(smb) > 0:
+            smc = sorted(smb, key=fDist); smd = [smc[0]]
+            del smb; #print ()
+            if 0:
+                for t in smc:
+                    x, y, z = t[1], t[2], t[3]
+                    print (f'c kxyz: {x:2} {y:2} {z:2}  fD: {fDist(t):0.6f}   os: {t[0]:3}  ruff: {t[4]:0.6f}')
+            for j in range(1,len(smc)):
+                if fDist(smc[j]) > fDist(smd[-1]):
+                    smd.append(smc[j])
+            del smc; #print ()
+        else: smd = []
         if 0:
             #print (f'\n\nAfter de-dup, j={j}  len smr={len(smr)}')
             #for cOffset, kx, ky, kz, ruff, offgrid, finer in smr:
@@ -433,7 +295,6 @@ def doAMethod(verts):    # A usually-faster method than brute force
     cellCount = max(1, nverts//Cell.popPerCell) # nominal cell count
     blokSide = (ovol/cellCount)**(1/adim)   # nominal cube-side
     nx, ny, nz = [max(1,int(round(1.001*l/blokSide))) for l in (xspan,yspan,zspan)]
-    #nx, ny, nz = [max(1, f) for f in (xflat, yflat, zflat)]
     # Blocks may be too big or too small for computed block
     # counts, so recompute blokSide, given those counts
     blokSide = 0
@@ -457,8 +318,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
         return int(dx*coMul) + int(dy*coMul)*ystep + int(dz*coMul)*zstep
 
     #-----------------------------------------
-    # Make lists of points in cells
-    
+    # Make lists of points in cells    
     cells = [None]*cellCount
     for jp in range(nverts):
         cellnum = calcCellNum(verts[jp]) # Put each vertex into a cell
@@ -471,7 +331,6 @@ def doAMethod(verts):    # A usually-faster method than brute force
         for c in cells: # uncomment this block to print each cell's list & limits
             if c and (1 or c.cell in [2,6,7]):
                 print (f'In cell {c.cell:2}:  {c.vList} / {c.vLo} / {c.vHi}')
-
     #-----------------------------------------
     # Within each cell, test distances for all pairs.  For random
     # data, time per cell is O(1) on average because O(popPerCell^2)
@@ -493,7 +352,6 @@ def doAMethod(verts):    # A usually-faster method than brute force
                 d2 = (p-q).mag2()   # Squared distance of p and q
                 if d2 < p.BSF[0]:  p.addNN(d2, kq)
                 if d2 < q.BSF[0]:  q.addNN(d2, jp)
-    #visData(verts, "wsA1", makeLabels=True, colorFunc=roro)
     #---debugging--------------------------------------
     def vChek(t, jp):
         for j in [0, 37, 38, 39]:
@@ -516,8 +374,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
             for cOffset, kx, ky, kz, ruff, offgrid, finer in smr:
                 if offgrid(atx+kx, aty+ky, atz+kz):
                     continue
-                #if 49999+jp in [0, 37, 38, 39]:
-                #    print (f'v{jp}\t{atx} {aty} {atz} : c{cellnum} to c{cellnum+cOffset}\t os {kx} {ky} {kz} : {cOffset}  \tparts: {xparts} {yparts} {zparts}   step: {ystep} {zstep}  ruff {ruff:0.4f}')
+                #print (f'v{jp}\t{atx} {aty} {atz} : c{cellnum} to c{cellnum+cOffset}\t os {kx} {ky} {kz} : {cOffset}  \tparts: {xparts} {yparts} {zparts}   step: {ystep} {zstep}  ruff {ruff:0.4f}')
                 if ruff > p.BSF[0]:
                     break
                 nbr = cells[cellnum+cOffset]
@@ -527,9 +384,7 @@ def doAMethod(verts):    # A usually-faster method than brute force
                 if finer(p, nbr):
                     nbr.setClosest(jp, verts)
                 #vChek('F', jp)
-    #visData(verts, "wsA2", makeLabels=True, colorFunc=roro)
-    #visData(verts, "wsA3")
-
+    return verts
 #----------------------------------------------------------------
 if __name__ == '__main__':
     from sys import argv
@@ -564,4 +419,4 @@ if __name__ == '__main__':
                 ptime = ctime
             if l=='v':    # Visualization: Generates SCAD code in baseName file
                 visData(datapoints, baseName, makeLabels=labls)
-
+#---------------------30---------------------

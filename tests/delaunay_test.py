@@ -2,80 +2,82 @@
 '''Tests for delaunay.py and related software'''
 # jiw 1 Dec 2020
 
-__author__ = "James Waldby"
-__copyright__ = "James Waldby"
+__author__ = __copyright__ = "James Waldby"
 __license__ = "mit"
 
 import unittest
 import os, sys, random
 from base_test import BaseTest
 from pypevue import Point
-from nearby.delaunaymain import makeTestData
-from nearby.delaunay import Face, Vert, CircumCircle2, CircumCircle3
+from nearby.delaunay import Face, Vert
+from nearby.delaunay import Triangulate, CircumCircle2, CircumCircle3
+from nearby import delaunayDTvis, kNN, kNNmain, kNNvis
 
 class delaunay_Test(BaseTest):
-    '''to run:
-      - cd nearby   (The project dir, not nearby/src/nearby)
-      - to run just this test:
-           python3 -m unittest discover tests -p test.py
-      - to run all tests:
-           python3 setup.py test
+    '''(In following, nearby is the project dir, not nearby/src/nearby)
+      -- to run just this test set:
+            cd nearby;  python3 -m unittest discover tests -p delaunay_test.py
+              -or-
+            cd nearby/tests;  ./delaunay_test.py
+      -- to run all tests:
+            cd nearby;  python3 setup.py test
     '''
+
     testPath = os.path.dirname(__file__)
+    visBase  = os.path.join(testPath, 'DT')
+    #print(f'testPath {testPath}    visBase {visBase}')
+    DTvisSetup  = (10,30,90)
     
-    def test_00_instantiate(self):
-        print('\nPoint and Face instantiation tests')
+    def xtest_00_instantiate(self):
+        print('  Point and Face instantiation tests')
         p = Point(1,2,3)
         q = Face(1,2,3)
         v = Vert(p, 7)
 
-    def test_03_(self):
-        print('\nmakeTestData - basic functionality')
-        # makeTestData(npoints, nfaces, style='xy', salt=123457, scale=10)
-        npoints, nfaces = 100, 2000
-        # By default, data is 2D (ie z coord is zero)
-        verts, faces, pIn, pOut = makeTestData(npoints, nfaces)
-        self.assertEqual(npoints, len(verts))
-        self.assertEqual(nfaces,  len(faces))
-        self.assertEqual(nfaces,  len(pIn))
-        self.assertEqual(nfaces,  len(pOut))
+    def test_DT20_8(self): self.doDTtest(2, 0, setup=(8,))
+    #def test_DT30_8(self): self.doDTtest(3, 0, setup=(8,))
+    #def test_DT21_8(self): self.doDTtest(2, 1, setup=(8,))
+    #def test_DT31_8(self): self.doDTtest(3, 1, setup=(8,))
+    #def test_DT21_18(self): self.doDTtest(2, 1, setup=(18,))
+    #def test_DT31_18(self): self.doDTtest(3, 1, setup=(18,))
+    #def test_DT20_(self): self.doDTtest(2, 0, visIt=False)
+    #def test_DT30_(self): self.doDTtest(3, 0, visIt=False)
 
-    def test_04_(self):
-        print('\nmakeTestData + CircumCircle in/out testing')
-        # makeTestData(npoints, nfaces, style='xy', salt=123457, scale=10)
-        npoints, nfaces = 100, 2000
-        # By default, data is 2D (ie z coord is zero)
-        verts, faces, pIn, pOut = makeTestData(npoints, nfaces)
-        self.assertEqual(npoints, len(verts))
-        self.assertEqual(nfaces,  len(faces))
-        self.assertEqual(nfaces,  len(pIn))
-        self.assertEqual(nfaces,  len(pOut))
-        # Tests for not-cached circumcircle calcs:
-        # CircumCircle2(point, threepoints, canon, cache),
-        # CircumCircle3(point, threepoints, canon, cache):
-        for pIO, ioio, tfIO in ((pIn,'in', True), (pOut,'out of',False)):
-            for f, p in zip(faces, pIO):
-                threep = [verts[p] for p in f.get123]
-                for cc in (CircumCircle2, CircumCircle3):
-                    zin, ctr, rr, dd = cc(p, threep, f.canon, {})
-                    self.assertEqual(zin, tfIO, f'{cc.__name__}: point {p} should be {ioio} circumcircle of face {f} = {threep}')
-    '''
-    def test_04_(self): pass        
-    
-    def test_05_(self): pass
+    def doDTtest(self, nDim, dataKind, setup=DTvisSetup, visIt=True):
+        print(f' Test Delaunay Triangulation  setup={setup}  vis={visIt}')
+        for npoints in setup:
+            visFile = f'{self.visBase}-{nDim}-{dataKind}-{npoints}-DT'
+            visForm = f' {nDim}D  np:{npoints}  t:{dataKind}'
+            print(f'  Test {visFile}')
+            points = kNNmain.makeTestData(npoints, dataKind, nDim=nDim)
+            verts = [Vert(p, jp) for jp, p in enumerate(points)]
+            # Make Delaunay Triangulation of points (verts)
+            verts, tris, cache = Triangulate(verts)
+            edges = {}
+            for f in tris:            # Make a dict of tris's edges 
+                cornerNums = f.get123 # Get triple of vert indices
+                p = verts[cornerNums[-1]]
+                jp = p.num
+                for cn in cornerNums:
+                    q = verts[cn]
+                    kq = q.num
+                    edges[(min(jp,kq), max(jp,kq))] = True
+                    jp = kq
+            print (f'edges={sorted(edges)}')
+            # Make nearest-neighbor info 
+            kNN.PNN.kNN = 1
+            ra = kNN.doAMethod(points)
+            # Visualize data sets now (so they exist even if errors occur)
+            if visIt:
+                delaunayDTvis.visData(verts, tris, visFile, makeLabels=True, dataForm=visForm)
+                visFile = f'{visFile[:-3]}-NN'
+                kNNvis.visData(points, visFile, makeLabels=True, dataForm=visForm)
+            # Test if all the nearest neighbors appear in the DT
+            for jp, p in enumerate(ra):
+                kq = p.nBSF[0]
+                pair = (min(jp,kq), max(jp,kq))
+                print (f'Testing {jp}-{kq} via {pair} and {edges.get(pair,False)}')
+                self.assertIn(pair, edges)
         
-    def test_06_(self): pass        
-    
-    def test_07_(self): pass        
-    
-    def test_08_(self): pass        
-    
-    def test_09_(self): pass        
-    
-    def test_10_(self): pass        
-    
-    def test_11_(self): pass
-    '''
-    
 if __name__ == '__main__':
     unittest.main()
