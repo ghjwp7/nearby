@@ -96,7 +96,7 @@ module oneLabel (trans, colo, siz, txt)
                 q = verts[kq]
                 dqp = q - p     # free vector, p to q
                 L = dqp.mag()
-                print (f'nf={nf} cornerNums={cornerNums} p={p}\t q={q}\t q#{q.num} kq={kq} L={L:0.3}')
+                #print (f'nf={nf} cornerNums={cornerNums} p={p}\t q={q}\t q#{q.num} kq={kq} L={L:0.3}')
                 yAngle = f'{round(90-degrees(asin(min(1, max(-1, dqp.z/L)))), 2)}'
                 zAngle = f'{round(degrees(atan2(dqp.y, dqp.x)), 2)}'
                 fout.write (f'''  oneArrow([{str(p)}], {yAngle}, {zAngle}, "{cocode}", {L:6.3f}, {jp}, {kq});\n''')
