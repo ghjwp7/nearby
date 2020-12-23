@@ -82,25 +82,29 @@ def Triangulate(pxy):
     pxy.append(Point(xmid - 20 * dmax, ymid - dmax))
     pxy.append(Point(xmid,        ymid + 20 * dmax))
     pxy.append(Point(xmid + 20 * dmax, ymid - dmax))
-    #print (f'Super-triangle: ({pxy[-3]}), ({pxy[-2]}), ({pxy[-1]})\n')
+    print (f'Super-triangle: ({pxy[-3]}), ({pxy[-2]}), ({pxy[-1]})\n')
     tris = [Face(nv, nv+1, nv+2)] # Start tris list with super-triangle
     cache = {}
     #  Add points one by one into tris, the present state of mesh
     for i in range(nv):
-        p = pxy[i]              # Get next point to work on Set up
-        #  edge list.  If point p is inside circumcircle of some
+        p = pxy[i]              # Get next point to work on
+        print (f'Working on v{i} o{p.num} at ({p})')
+        #  Set up edge list.  If point p is inside circumcircle of some
         #  triangle T, then edges of T get put into edge list, and T
         #  gets removed from tris.
         j, edges = 0, []  # edges are in class IEDGE
+        
         while j < len(tris):
             if tris[j].complete:
                 j += 1; continue # Skip tests if triangle j already done
-            threep = [pxy[p] for p in tris[j].get123]
+            threep = [pxy[pt] for pt in tris[j].get123]
             # Get is-inside flag, center point c, r*r, d*d
             inside, c, rr, dd = Vert.CircumCircle(p, threep, tris[j].canon, cache)
-            #print (f'inside:{inside}   c:{c}   rr:{rr}   dd:{dd}')
-            if c.x < p.x and dd > rr:
+            print (f'inside:{inside} \tc:{c} \trr:{rr:0.3} \tdd:{dd:0.3} \t[{threep[0]}; \t{threep[1]}; \t{threep[2]}]')
+            dx = p.x-c.x; ddx = dx*dx
+            if dx > 0 and ddx > rr:
                 tris[j].complete = True # Due to x-sorting of pxy, j is done
+                print (f'\nMarked tris[{j}] = {tris[j]} complete since {c.x} < {p.x} and {ddx} > {rr}\n')
             if inside:             # Add 3 edges into edge list
                 p1, p2, p3 = tris[j].get123
                 edges.append((p1, p2))
@@ -145,9 +149,9 @@ def Triangulate(pxy):
     return pxy[:-3], tris, cache
 #==============================================================
 def CircumCircle2(p, threep, canon, cache):
-    # Returns a four-tuple, (inside, xc, yc, rr) where `inside` is
-    # True if point p is inside the circumcircle that points p1,
-    # p2, p3 define.  `xc, yc` is circumcircle center.  `rr` is
+    # Returns a four-tuple, (inside, (xc, yc), rr, dd) where `inside`
+    # is True if point p is inside the circumcircle that points p1,
+    # p2, p3 define.  `(xc, yc, zc` is circumcircle center.  `rr` is
     # squared radius r of circumcircle.  Points on edge of circle
     # register as inside it.  xc, yc, and r are obtained from cache if
     # possible.

@@ -35,13 +35,13 @@ class delaunay_Test(BaseTest):
         v = Vert(p, 7)
 
     def test_DT20_8(self): self.doDTtest(2, 0, setup=(8,))
-    #def test_DT30_8(self): self.doDTtest(3, 0, setup=(8,))
-    #def test_DT21_8(self): self.doDTtest(2, 1, setup=(8,))
-    #def test_DT31_8(self): self.doDTtest(3, 1, setup=(8,))
-    #def test_DT21_18(self): self.doDTtest(2, 1, setup=(18,))
-    #def test_DT31_18(self): self.doDTtest(3, 1, setup=(18,))
-    #def test_DT20_(self): self.doDTtest(2, 0, visIt=False)
-    #def test_DT30_(self): self.doDTtest(3, 0, visIt=False)
+    def test_DT30_8(self): self.doDTtest(3, 0, setup=(8,))
+    def test_DT21_8(self): self.doDTtest(2, 1, setup=(8,))
+    def test_DT31_8(self): self.doDTtest(3, 1, setup=(8,))
+    def test_DT21_18(self): self.doDTtest(2, 1, setup=(18,))
+    def test_DT31_18(self): self.doDTtest(3, 1, setup=(18,))
+    def test_DT20_(self): self.doDTtest(2, 0, visIt=False)
+    def test_DT30_(self): self.doDTtest(3, 0, visIt=False)
 
     def doDTtest(self, nDim, dataKind, setup=DTvisSetup, visIt=True):
         print(f' Test Delaunay Triangulation  setup={setup}  vis={visIt}')
@@ -76,7 +76,7 @@ class delaunay_Test(BaseTest):
             for jp, p in enumerate(ra):
                 kq = p.nBSF[0]
                 pair = (min(jp,kq), max(jp,kq))
-                print (f'Testing {jp}-{kq} via {pair} and {edges.get(pair,False)}')
+                #print (f'Testing {jp}-{kq} via {pair} and {edges.get(pair,False)}')
                 self.assertIn(pair, edges)
         
 if __name__ == '__main__':
