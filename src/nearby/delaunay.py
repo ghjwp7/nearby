@@ -46,8 +46,9 @@ class Vert(Point):
         self.x, self.y, self.z, self.num = p.x, p.y, p.z, num
 #==============================================================
 def Triangulate(pxy):
-    '''Accepts a list of vertices in array pxy.  Returns a list of
-    triangular faces with vertices going clockwise. '''
+    '''Accepts a list of vertices in array pxy.  Returns three items: (1)
+    modified pxy; (2) a list of triangular faces with vertices going
+    clockwise; (3) a cache of circumcenter data.    '''
     #  Note, Triangulate mods pxy by sorting it and by adding 3
     # `super-triangle` points at end
     
