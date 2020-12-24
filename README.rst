@@ -15,6 +15,10 @@ test/ directory, it has some basic unit tests for Delaunay and
 circumcircle parts of delaunay.py, and for nearest-neighbor methods of
 kNN.py.
 
+Note, kNN.py and delaunay.py both import Point (a class that
+represents 3D points and operations) from pypevue, which is available
+from https://github.com/ghjwp7/pypevue.git or git@github.com:ghjwp7/pypevue.git
+
 When given 3D data and setup, the Delaunay program (method
 delaunay.Triangulate) uses 3D metrics but basically 2D analysis.
 Thus, the triangulations it makes for 3D data may fail to meet
@@ -28,10 +32,10 @@ random data sets of specified size; runs 2D or 3D **circumcircle**
 tests; and can use delaunayvis.py to produce SCAD code for
 visualization of solutions using OpenSCAD.  See file
 yume-delaunay-test re demos.  Note, the Delaunay triangulation tests
-at the moment merely check that 1NNg is a subgraph of the DT.  As
-noted above, that condition mightn't be necessary or typical of 3D
-data sets.  (Anyhow, proper 3D Delaunay programs generate
-tetrahedrons, not just triangles as the present program does.)
+at the moment merely check the NN graph is a subgraph of DT.  As noted
+above, that condition mightn't be necessary or typical of 3D data
+sets.  (Anyhow, proper 3D Delaunay programs generate tetrahedrons, not
+just triangles as the present program does.)
 
 Note, the present program may suffice for 3D data sets of surfaces
 like balls or polyhedrons; but see pypevue example eg-auto-freq-6-2d
