@@ -19,9 +19,9 @@ When given 3D data and setup, the Delaunay program (method
 delaunay.Triangulate) uses 3D metrics but basically 2D analysis.
 Thus, the triangulations it makes for 3D data may fail to meet
 Delaunay criteria unless extra post-processing is done.  Note, for 2D
-data, the first-nearest-neighbor graph (sat 1NNg) is necessarily a
+data, the first-nearest-neighbor graph (say 1NNg) is necessarily a
 subgraph of the Delaunay triangulation for that data.  For general 3D
-data sets that condition is neither necessary nor typical.
+data sets that condition might not be necessary or typical.
 
 Program delaunaymain.py is a standalone demo program that generates
 random data sets of specified size; runs 2D or 3D **circumcircle**
@@ -29,9 +29,9 @@ tests; and can use delaunayvis.py to produce SCAD code for
 visualization of solutions using OpenSCAD.  See file
 yume-delaunay-test re demos.  Note, the Delaunay triangulation tests
 at the moment merely check that 1NNg is a subgraph of the DT.  As
-noted above, that condition isn't necessary or typical of 3D data
-sets.  (Moreover, proper 3D Delaunay programs generate tetrahedrons,
-not just triangles as the present program does.)
+noted above, that condition mightn't be necessary or typical of 3D
+data sets.  (Anyhow, proper 3D Delaunay programs generate
+tetrahedrons, not just triangles as the present program does.)
 
 Note, the present program may suffice for 3D data sets of surfaces
 like balls or polyhedrons; but see pypevue example eg-auto-freq-6-2d
