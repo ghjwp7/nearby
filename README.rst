@@ -17,7 +17,9 @@ kNN.py.
 
 Note, kNN.py and delaunay.py both import Point (a class that
 represents 3D points and operations) from pypevue, which is available
-from https://github.com/ghjwp7/pypevue.git or git@github.com:ghjwp7/pypevue.git
+at https://github.com/ghjwp7/pypevue.git or
+<git@github.com:ghjwp7/pypevue.git> which can be installed as is or one
+can extract the point class from within pypevue's __init__.py file
 
 When given 3D data and setup, the Delaunay program (method
 delaunay.Triangulate) uses 3D metrics but basically 2D analysis.
